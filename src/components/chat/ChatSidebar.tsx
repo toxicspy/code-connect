@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import AddContactDialog from "./AddContactDialog";
+import ProfileEditDialog from "./ProfileEditDialog";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Profile = Tables<"profiles">;
