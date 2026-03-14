@@ -159,6 +159,10 @@ export type Database = {
     }
     Functions: {
       generate_user_code: { Args: never; Returns: string }
+      is_conversation_participant: {
+        Args: { _conversation_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
