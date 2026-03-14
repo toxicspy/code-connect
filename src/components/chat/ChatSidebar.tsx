@@ -162,7 +162,7 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
               <Copy className="h-3 w-3" />
             </button>
           </div>
-        </div>
+        </button>
         <div className="flex gap-1">
           <Button variant="ghost" size="icon" onClick={() => setShowAddContact(true)} className="h-8 w-8">
             <UserPlus className="h-4 w-4" />
