@@ -54,8 +54,12 @@ export const useConversations = () => {
     const profileMap = new Map(profiles?.map((p) => [p.user_id, p]));
 
     const results: ConversationWithDetails[] = [];
+    const seenConvIds = new Set<string>();
 
     for (const part of allParticipants) {
+      if (seenConvIds.has(part.conversation_id)) continue;
+      seenConvIds.add(part.conversation_id);
+
       const profile = profileMap.get(part.user_id);
       if (!profile) continue;
 
