@@ -207,8 +207,12 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
                     disabled={startingChat === p.user_id}
                     className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
                   >
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent font-display text-sm font-semibold text-accent-foreground">
-                      {p.display_name.charAt(0).toUpperCase()}
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent font-display text-sm font-semibold text-accent-foreground overflow-hidden">
+                      {p.avatar_url ? (
+                        <img src={p.avatar_url} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        p.display_name.charAt(0).toUpperCase()
+                      )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <span className="text-sm font-medium truncate block">{p.display_name}</span>
