@@ -73,19 +73,23 @@ const AddContactDialog = ({ open, onOpenChange }: AddContactDialogProps) => {
       const sharedConv = theirConvs?.find((c) => myIds.has(c.conversation_id));
 
       if (!sharedConv) {
-        // Create conversation
-        const { data: conv } = await supabase
-          .from("conversations")
-          .insert({})
-          .select()
-          .single();
+        // Create conversation with known id (avoids requiring immediate SELECT on new row)
+        const convId = crypto.randomUUID();
 
-        if (conv) {
-          await supabase.from("conversation_participants").insert([
-            { conversation_id: conv.id, user_id: user.id },
-            { conversation_id: conv.id, user_id: targetProfile.user_id },
-          ]);
-        }
+        const { error: convError } = await supabase
+          .from("conversations")
+          .insert({ id: convId });
+        if (convError) throw convError;
+
+        const { error: selfParticipantError } = await supabase
+          .from("conversation_participants")
+          .insert({ conversation_id: convId, user_id: user.id });
+        if (selfParticipantError) throw selfParticipantError;
+
+        const { error: otherParticipantError } = await supabase
+          .from("conversation_participants")
+          .insert({ conversation_id: convId, user_id: targetProfile.user_id });
+        if (otherParticipantError) throw otherParticipantError;
       }
 
       toast.success(`Added ${targetProfile.display_name} to contacts!`);

@@ -75,20 +75,23 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
       if (sharedConv) {
         convId = sharedConv.conversation_id;
       } else {
-        // Create conversation
-        const { data: conv } = await supabase
+        // Create conversation with known id (avoids requiring immediate SELECT on new row)
+        convId = crypto.randomUUID();
+
+        const { error: convError } = await supabase
           .from("conversations")
-          .insert({})
-          .select()
-          .single();
+          .insert({ id: convId });
+        if (convError) throw convError;
 
-        if (!conv) throw new Error("Failed to create conversation");
-        convId = conv.id;
+        const { error: selfParticipantError } = await supabase
+          .from("conversation_participants")
+          .insert({ conversation_id: convId, user_id: user.id });
+        if (selfParticipantError) throw selfParticipantError;
 
-        await supabase.from("conversation_participants").insert([
-          { conversation_id: convId, user_id: user.id },
-          { conversation_id: convId, user_id: targetProfile.user_id },
-        ]);
+        const { error: otherParticipantError } = await supabase
+          .from("conversation_participants")
+          .insert({ conversation_id: convId, user_id: targetProfile.user_id });
+        if (otherParticipantError) throw otherParticipantError;
 
         // Add as contact if not already
         const { data: existing } = await supabase
