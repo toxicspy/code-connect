@@ -26,6 +26,7 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
   const [searching, setSearching] = useState(false);
   const [startingChat, setStartingChat] = useState<string | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
 
   // Debounced global user search
   useEffect(() => {
