@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import AddContactDialog from "./AddContactDialog";
+import ProfileEditDialog from "./ProfileEditDialog";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Profile = Tables<"profiles">;
@@ -25,6 +26,7 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
   const [searching, setSearching] = useState(false);
   const [startingChat, setStartingChat] = useState<string | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
 
   // Debounced global user search
   useEffect(() => {
@@ -142,11 +144,15 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
     <div className="flex h-full flex-col border-r bg-card">
       {/* Header */}
       <div className="flex items-center justify-between border-b px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary">
-            <MessageCircle className="h-4 w-4 text-primary-foreground" />
+        <button onClick={() => setShowProfile(true)} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary overflow-hidden">
+            {profile?.avatar_url ? (
+              <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <MessageCircle className="h-4 w-4 text-primary-foreground" />
+            )}
           </div>
-          <div>
+          <div className="text-left">
             <h2 className="font-display text-sm font-semibold">{profile?.display_name}</h2>
             <button
               onClick={copyCode}
@@ -156,7 +162,7 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
               <Copy className="h-3 w-3" />
             </button>
           </div>
-        </div>
+        </button>
         <div className="flex gap-1">
           <Button variant="ghost" size="icon" onClick={() => setShowAddContact(true)} className="h-8 w-8">
             <UserPlus className="h-4 w-4" />
@@ -201,8 +207,12 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
                     disabled={startingChat === p.user_id}
                     className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
                   >
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent font-display text-sm font-semibold text-accent-foreground">
-                      {p.display_name.charAt(0).toUpperCase()}
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent font-display text-sm font-semibold text-accent-foreground overflow-hidden">
+                      {p.avatar_url ? (
+                        <img src={p.avatar_url} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        p.display_name.charAt(0).toUpperCase()
+                      )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <span className="text-sm font-medium truncate block">{p.display_name}</span>
@@ -248,8 +258,12 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
                 selectedConversation === conv.id ? "bg-accent" : ""
               }`}
             >
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 font-display text-sm font-semibold text-primary">
-                {conv.otherUser.display_name.charAt(0).toUpperCase()}
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 font-display text-sm font-semibold text-primary overflow-hidden">
+                {conv.otherUser.avatar_url ? (
+                  <img src={conv.otherUser.avatar_url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  conv.otherUser.display_name.charAt(0).toUpperCase()
+                )}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between">
@@ -270,6 +284,7 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
       </div>
 
       <AddContactDialog open={showAddContact} onOpenChange={setShowAddContact} />
+      <ProfileEditDialog open={showProfile} onOpenChange={setShowProfile} />
     </div>
   );
 };
