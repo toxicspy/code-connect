@@ -258,8 +258,12 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
                 selectedConversation === conv.id ? "bg-accent" : ""
               }`}
             >
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 font-display text-sm font-semibold text-primary">
-                {conv.otherUser.display_name.charAt(0).toUpperCase()}
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 font-display text-sm font-semibold text-primary overflow-hidden">
+                {conv.otherUser.avatar_url ? (
+                  <img src={conv.otherUser.avatar_url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  conv.otherUser.display_name.charAt(0).toUpperCase()
+                )}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between">
