@@ -284,6 +284,7 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
       </div>
 
       <AddContactDialog open={showAddContact} onOpenChange={setShowAddContact} />
+      <ProfileEditDialog open={showProfile} onOpenChange={setShowProfile} />
     </div>
   );
 };
