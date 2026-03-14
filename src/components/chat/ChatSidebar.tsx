@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useConversations, ConversationWithDetails } from "@/hooks/useConversations";
-import { Search, UserPlus, LogOut, Copy, MessageCircle } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Search, UserPlus, LogOut, Copy, MessageCircle, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import AddContactDialog from "./AddContactDialog";
+import type { Tables } from "@/integrations/supabase/types";
+
+type Profile = Tables<"profiles">;
 
 interface ChatSidebarProps {
   selectedConversation: string | null;
@@ -14,10 +18,109 @@ interface ChatSidebarProps {
 }
 
 const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebarProps) => {
-  const { profile, signOut } = useAuth();
-  const { conversations, loading } = useConversations();
+  const { user, profile, signOut } = useAuth();
+  const { conversations, loading, refetch } = useConversations();
   const [search, setSearch] = useState("");
   const [showAddContact, setShowAddContact] = useState(false);
+  const [searchResults, setSearchResults] = useState<Profile[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [startingChat, setStartingChat] = useState<string | null>(null);
+
+  // Debounced global user search
+  useEffect(() => {
+    if (!search.trim() || !user) {
+      setSearchResults([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      const term = search.trim();
+      const upperTerm = term.toUpperCase();
+
+      const { data } = await supabase
+        .from("profiles")
+        .select("*")
+        .neq("user_id", user.id)
+        .or(`display_name.ilike.%${term}%,user_code.eq.${upperTerm}`);
+
+      setSearchResults(data || []);
+      setSearching(false);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [search, user]);
+
+  const startChatWith = useCallback(async (targetProfile: Profile) => {
+    if (!user) return;
+    setStartingChat(targetProfile.user_id);
+
+    try {
+      // Check existing conversation
+      const { data: myConvs } = await supabase
+        .from("conversation_participants")
+        .select("conversation_id")
+        .eq("user_id", user.id);
+
+      const { data: theirConvs } = await supabase
+        .from("conversation_participants")
+        .select("conversation_id")
+        .eq("user_id", targetProfile.user_id);
+
+      const myIds = new Set(myConvs?.map((c) => c.conversation_id));
+      const sharedConv = theirConvs?.find((c) => myIds.has(c.conversation_id));
+
+      let convId: string;
+
+      if (sharedConv) {
+        convId = sharedConv.conversation_id;
+      } else {
+        // Create conversation
+        const { data: conv } = await supabase
+          .from("conversations")
+          .insert({})
+          .select()
+          .single();
+
+        if (!conv) throw new Error("Failed to create conversation");
+        convId = conv.id;
+
+        await supabase.from("conversation_participants").insert([
+          { conversation_id: convId, user_id: user.id },
+          { conversation_id: convId, user_id: targetProfile.user_id },
+        ]);
+
+        // Add as contact if not already
+        const { data: existing } = await supabase
+          .from("contacts")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("contact_user_id", targetProfile.user_id)
+          .maybeSingle();
+
+        if (!existing) {
+          await supabase.from("contacts").insert({
+            user_id: user.id,
+            contact_user_id: targetProfile.user_id,
+          });
+        }
+      }
+
+      await refetch();
+      // Select the conversation
+      onSelectConversation({
+        id: convId,
+        otherUser: targetProfile,
+        updated_at: new Date().toISOString(),
+      });
+      setSearch("");
+      setSearchResults([]);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to start chat");
+    } finally {
+      setStartingChat(null);
+    }
+  }, [user, refetch, onSelectConversation]);
 
   const filtered = conversations.filter((c) =>
     c.otherUser.display_name.toLowerCase().includes(search.toLowerCase())
@@ -29,6 +132,8 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
       toast.success("Code copied!");
     }
   };
+
+  const showGlobalResults = search.trim().length > 0;
 
   return (
     <div className="flex h-full flex-col border-r bg-card">
@@ -66,21 +171,70 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search chats..."
+            placeholder="Search users by name or code..."
             className="pl-9 bg-muted border-0"
           />
         </div>
       </div>
 
-      {/* Conversation list */}
+      {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        {loading ? (
+        {/* Global search results */}
+        {showGlobalResults && (
+          <>
+            {searching ? (
+              <div className="flex items-center justify-center py-6 text-sm text-muted-foreground gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" /> Searching...
+              </div>
+            ) : searchResults.length > 0 ? (
+              <div>
+                <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Users found
+                </div>
+                {searchResults.map((p) => (
+                  <button
+                    key={p.user_id}
+                    onClick={() => startChatWith(p)}
+                    disabled={startingChat === p.user_id}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                  >
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent font-display text-sm font-semibold text-accent-foreground">
+                      {p.display_name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm font-medium truncate block">{p.display_name}</span>
+                      <span className="text-[10px] font-mono text-muted-foreground">#{p.user_code}</span>
+                    </div>
+                    {startingChat === p.user_id ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    ) : (
+                      <MessageCircle className="h-4 w-4 text-primary" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                No users found
+              </div>
+            )}
+
+            {filtered.length > 0 && (
+              <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-t mt-2 pt-2">
+                Your chats
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Conversation list */}
+        {loading && !showGlobalResults ? (
           <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">Loading...</div>
-        ) : filtered.length === 0 ? (
+        ) : !showGlobalResults && filtered.length === 0 ? (
           <div className="px-4 py-12 text-center">
             <MessageCircle className="mx-auto mb-3 h-10 w-10 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">No conversations yet</p>
-            <p className="mt-1 text-xs text-muted-foreground/70">Add a contact to start chatting</p>
+            <p className="mt-1 text-xs text-muted-foreground/70">Search for a user to start chatting</p>
           </div>
         ) : (
           filtered.map((conv) => (
