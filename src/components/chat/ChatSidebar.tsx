@@ -144,11 +144,15 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
     <div className="flex h-full flex-col border-r bg-card">
       {/* Header */}
       <div className="flex items-center justify-between border-b px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary">
-            <MessageCircle className="h-4 w-4 text-primary-foreground" />
+        <button onClick={() => setShowProfile(true)} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary overflow-hidden">
+            {profile?.avatar_url ? (
+              <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <MessageCircle className="h-4 w-4 text-primary-foreground" />
+            )}
           </div>
-          <div>
+          <div className="text-left">
             <h2 className="font-display text-sm font-semibold">{profile?.display_name}</h2>
             <button
               onClick={copyCode}
