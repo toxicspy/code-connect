@@ -10,6 +10,8 @@ export interface ConversationWithDetails {
   otherUser: Profile;
   lastMessage?: { content: string; created_at: string; sender_id: string };
   updated_at: string;
+  is_pinned: boolean;
+  is_archived: boolean;
 }
 
 export const useConversations = () => {
@@ -35,9 +37,18 @@ export const useConversations = () => {
 
     const { data: allParticipants } = await supabase
       .from("conversation_participants")
-      .select("conversation_id, user_id")
+      .select("conversation_id, user_id, is_pinned, is_archived")
       .in("conversation_id", convIds)
       .neq("user_id", user.id);
+
+    // Also fetch current user's participation for pin/archive status
+    const { data: myParticipantDetails } = await supabase
+      .from("conversation_participants")
+      .select("conversation_id, is_pinned, is_archived")
+      .in("conversation_id", convIds)
+      .eq("user_id", user.id);
+
+    const myStatusMap = new Map(myParticipantDetails?.map((p) => [p.conversation_id, { is_pinned: p.is_pinned, is_archived: p.is_archived }]));
 
     if (!allParticipants?.length) {
       setConversations([]);
@@ -70,11 +81,14 @@ export const useConversations = () => {
         .order("created_at", { ascending: false })
         .limit(1);
 
+      const myStatus = myStatusMap.get(part.conversation_id);
       results.push({
         id: part.conversation_id,
         otherUser: profile,
         lastMessage: msgs?.[0] || undefined,
         updated_at: msgs?.[0]?.created_at || new Date().toISOString(),
+        is_pinned: myStatus?.is_pinned ?? false,
+        is_archived: myStatus?.is_archived ?? false,
       });
     }
 
