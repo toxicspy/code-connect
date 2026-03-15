@@ -26,6 +26,9 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
   const [targetLanguage, setTargetLanguage] = useState("Kannada");
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [translating, setTranslating] = useState<Set<string>>(new Set());
+  const [failedTranslations, setFailedTranslations] = useState<Set<string>>(new Set());
+  const [isRateLimited, setIsRateLimited] = useState(false);
+  const processingRef = useRef(false);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -33,32 +36,50 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
     }
   }, [messages]);
 
-  // Reset translations when conversation changes or translation is toggled off
+  // Reset translations when conversation/language changes or translation is toggled off
   useEffect(() => {
     setTranslations({});
     setTranslating(new Set());
+    setFailedTranslations(new Set());
+    setIsRateLimited(false);
+    processingRef.current = false;
   }, [conversation?.id, translateEnabled, targetLanguage]);
 
   const translateText = useCallback(async (msgId: string, text: string) => {
-    if (translations[msgId] || translating.has(msgId)) return;
+    if (translations[msgId] || translating.has(msgId) || failedTranslations.has(msgId)) {
+      return "skip" as const;
+    }
 
     setTranslating((prev) => new Set(prev).add(msgId));
     try {
       const { data, error } = await supabase.functions.invoke("translate", {
         body: { text, targetLanguage },
       });
-      if (error) throw error;
-      if (data?.error) {
-        if (data.error.includes("Rate limit")) {
-          toast.error("Translation rate limited. Please wait a moment.");
-        } else {
-          toast.error(data.error);
+
+      const responseError = error?.message || data?.error;
+      if (responseError) {
+        const is429 = responseError.includes("429") || responseError.toLowerCase().includes("rate limit");
+        if (is429) {
+          setIsRateLimited(true);
+          toast.error("Too many translation requests. Please wait a moment and toggle translate on again.");
+          return "rate_limited" as const;
         }
-        return;
+        setFailedTranslations((prev) => new Set(prev).add(msgId));
+        return "failed" as const;
       }
+
       setTranslations((prev) => ({ ...prev, [msgId]: data.translated }));
+      return "ok" as const;
     } catch (e: any) {
-      console.error("Translation error:", e);
+      const msg = String(e?.message || "");
+      const is429 = msg.includes("429") || msg.toLowerCase().includes("rate limit");
+      if (is429) {
+        setIsRateLimited(true);
+        toast.error("Too many translation requests. Please wait a moment and toggle translate on again.");
+        return "rate_limited" as const;
+      }
+      setFailedTranslations((prev) => new Set(prev).add(msgId));
+      return "failed" as const;
     } finally {
       setTranslating((prev) => {
         const next = new Set(prev);
@@ -66,29 +87,42 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
         return next;
       });
     }
-  }, [targetLanguage, translations, translating]);
+  }, [targetLanguage, translations, translating, failedTranslations]);
 
-  // Translate messages sequentially with delay to avoid rate limits
+  // Translate messages sequentially with throttling (single queue worker)
   useEffect(() => {
-    if (!translateEnabled || !targetLanguage || messages.length === 0) return;
+    if (!translateEnabled || !targetLanguage || messages.length === 0 || isRateLimited) return;
+    if (processingRef.current) return;
 
     const untranslated = messages.filter(
-      (msg) => !translations[msg.id] && !translating.has(msg.id)
+      (msg) => !translations[msg.id] && !translating.has(msg.id) && !failedTranslations.has(msg.id)
     );
     if (untranslated.length === 0) return;
 
     let cancelled = false;
-    const translateSequentially = async () => {
+    processingRef.current = true;
+
+    const processQueue = async () => {
       for (const msg of untranslated) {
         if (cancelled) break;
-        await translateText(msg.id, msg.content);
-        if (!cancelled) await new Promise((r) => setTimeout(r, 1000));
+        const result = await translateText(msg.id, msg.content);
+        if (result === "rate_limited") break;
+        if (!cancelled) await new Promise((r) => setTimeout(r, 2000));
       }
     };
-    translateSequentially();
 
-    return () => { cancelled = true; };
-  }, [translateEnabled, messages, targetLanguage]);
+    processQueue()
+      .catch((err) => {
+        console.error("Translation queue failed:", err);
+      })
+      .finally(() => {
+        processingRef.current = false;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [translateEnabled, targetLanguage, messages, translations, translating, failedTranslations, isRateLimited, translateText]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
