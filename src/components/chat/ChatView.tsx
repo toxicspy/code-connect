@@ -48,10 +48,17 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
         body: { text, targetLanguage },
       });
       if (error) throw error;
+      if (data?.error) {
+        if (data.error.includes("Rate limit")) {
+          toast.error("Translation rate limited. Please wait a moment.");
+        } else {
+          toast.error(data.error);
+        }
+        return;
+      }
       setTranslations((prev) => ({ ...prev, [msgId]: data.translated }));
     } catch (e: any) {
       console.error("Translation error:", e);
-      toast.error("Translation failed");
     } finally {
       setTranslating((prev) => {
         const next = new Set(prev);
@@ -61,15 +68,27 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
     }
   }, [targetLanguage, translations, translating]);
 
-  // Translate messages when enabled
+  // Translate messages sequentially with delay to avoid rate limits
   useEffect(() => {
     if (!translateEnabled || !targetLanguage || messages.length === 0) return;
-    messages.forEach((msg) => {
-      if (!translations[msg.id] && !translating.has(msg.id)) {
-        translateText(msg.id, msg.content);
+
+    const untranslated = messages.filter(
+      (msg) => !translations[msg.id] && !translating.has(msg.id)
+    );
+    if (untranslated.length === 0) return;
+
+    let cancelled = false;
+    const translateSequentially = async () => {
+      for (const msg of untranslated) {
+        if (cancelled) break;
+        await translateText(msg.id, msg.content);
+        if (!cancelled) await new Promise((r) => setTimeout(r, 1000));
       }
-    });
-  }, [translateEnabled, messages, targetLanguage, translateText]);
+    };
+    translateSequentially();
+
+    return () => { cancelled = true; };
+  }, [translateEnabled, messages, targetLanguage]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
