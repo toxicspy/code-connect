@@ -2,13 +2,14 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useConversations, ConversationWithDetails } from "@/hooks/useConversations";
 import { supabase } from "@/integrations/supabase/client";
-import { Search, UserPlus, LogOut, Copy, MessageCircle, Loader2 } from "lucide-react";
+import { Search, UserPlus, LogOut, Copy, MessageCircle, Loader2, MoreVertical, Archive } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import AddContactDialog from "./AddContactDialog";
 import ProfileEditDialog from "./ProfileEditDialog";
+import ConversationContextMenu from "./ConversationContextMenu";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Profile = Tables<"profiles">;
