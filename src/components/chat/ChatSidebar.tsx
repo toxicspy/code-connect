@@ -262,34 +262,53 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
           </div>
         ) : (
           filtered.map((conv) => (
-            <button
+            <div
               key={conv.id}
-              onClick={() => onSelectConversation(conv)}
-              className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 ${
+              className={`group relative flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 ${
                 selectedConversation === conv.id ? "bg-accent" : ""
               }`}
             >
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 font-display text-sm font-semibold text-primary overflow-hidden">
-                {conv.otherUser.avatar_url ? (
-                  <img src={conv.otherUser.avatar_url} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  conv.otherUser.display_name.charAt(0).toUpperCase()
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium truncate">{conv.otherUser.display_name}</span>
-                  {conv.lastMessage && (
-                    <span className="text-[10px] text-muted-foreground">
-                      {formatDistanceToNow(new Date(conv.lastMessage.created_at), { addSuffix: false })}
-                    </span>
+              <button
+                onClick={() => onSelectConversation(conv)}
+                className="flex flex-1 items-center gap-3 min-w-0"
+              >
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 font-display text-sm font-semibold text-primary overflow-hidden">
+                  {conv.otherUser.avatar_url ? (
+                    <img src={conv.otherUser.avatar_url} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    conv.otherUser.display_name.charAt(0).toUpperCase()
                   )}
                 </div>
-                <p className="truncate text-xs text-muted-foreground">
-                  {conv.lastMessage?.content || "No messages yet"}
-                </p>
-              </div>
-            </button>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium truncate flex items-center gap-1">
+                      {conv.is_pinned && <Pin className="h-3 w-3 text-muted-foreground inline-block" />}
+                      {conv.otherUser.display_name}
+                    </span>
+                    {conv.lastMessage && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {formatDistanceToNow(new Date(conv.lastMessage.created_at), { addSuffix: false })}
+                      </span>
+                    )}
+                  </div>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {conv.lastMessage?.content || "No messages yet"}
+                  </p>
+                </div>
+              </button>
+              <ConversationContextMenu
+                conversationId={conv.id}
+                isPinned={conv.is_pinned}
+                isArchived={conv.is_archived}
+                otherUserName={conv.otherUser.display_name}
+                onUpdate={refetch}
+                onDelete={selectedConversation === conv.id ? () => onSelectConversation(null as any) : undefined}
+              >
+                <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-muted">
+                  <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                </button>
+              </ConversationContextMenu>
+            </div>
           ))
         )}
       </div>
