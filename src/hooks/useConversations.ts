@@ -10,6 +10,8 @@ export interface ConversationWithDetails {
   otherUser: Profile;
   lastMessage?: { content: string; created_at: string; sender_id: string };
   updated_at: string;
+  is_pinned: boolean;
+  is_archived: boolean;
 }
 
 export const useConversations = () => {
