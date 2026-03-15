@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useConversations, ConversationWithDetails } from "@/hooks/useConversations";
 import { supabase } from "@/integrations/supabase/client";
-import { Search, UserPlus, LogOut, Copy, MessageCircle, Loader2, MoreVertical, Archive } from "lucide-react";
+import { Search, UserPlus, LogOut, Copy, MessageCircle, Loader2, MoreVertical, Archive, Pin } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
