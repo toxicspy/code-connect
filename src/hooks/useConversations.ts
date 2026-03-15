@@ -81,11 +81,14 @@ export const useConversations = () => {
         .order("created_at", { ascending: false })
         .limit(1);
 
+      const myStatus = myStatusMap.get(part.conversation_id);
       results.push({
         id: part.conversation_id,
         otherUser: profile,
         lastMessage: msgs?.[0] || undefined,
         updated_at: msgs?.[0]?.created_at || new Date().toISOString(),
+        is_pinned: myStatus?.is_pinned ?? false,
+        is_archived: myStatus?.is_archived ?? false,
       });
     }
 

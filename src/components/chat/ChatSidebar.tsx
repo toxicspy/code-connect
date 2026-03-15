@@ -117,6 +117,8 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
         id: convId,
         otherUser: targetProfile,
         updated_at: new Date().toISOString(),
+        is_pinned: false,
+        is_archived: false,
       });
       setSearch("");
       setSearchResults([]);
