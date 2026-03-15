@@ -1,11 +1,14 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMessages } from "@/hooks/useMessages";
 import { ConversationWithDetails } from "@/hooks/useConversations";
-import { Send, ArrowLeft } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Send, ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
+import { toast } from "sonner";
+import TranslationSettings from "./TranslationSettings";
 
 interface ChatViewProps {
   conversation: ConversationWithDetails | null;
@@ -18,11 +21,55 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Translation state
+  const [translateEnabled, setTranslateEnabled] = useState(false);
+  const [targetLanguage, setTargetLanguage] = useState("Kannada");
+  const [translations, setTranslations] = useState<Record<string, string>>({});
+  const [translating, setTranslating] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Reset translations when conversation changes or translation is toggled off
+  useEffect(() => {
+    setTranslations({});
+    setTranslating(new Set());
+  }, [conversation?.id, translateEnabled, targetLanguage]);
+
+  const translateText = useCallback(async (msgId: string, text: string) => {
+    if (translations[msgId] || translating.has(msgId)) return;
+
+    setTranslating((prev) => new Set(prev).add(msgId));
+    try {
+      const { data, error } = await supabase.functions.invoke("translate", {
+        body: { text, targetLanguage },
+      });
+      if (error) throw error;
+      setTranslations((prev) => ({ ...prev, [msgId]: data.translated }));
+    } catch (e: any) {
+      console.error("Translation error:", e);
+      toast.error("Translation failed");
+    } finally {
+      setTranslating((prev) => {
+        const next = new Set(prev);
+        next.delete(msgId);
+        return next;
+      });
+    }
+  }, [targetLanguage, translations, translating]);
+
+  // Translate messages when enabled
+  useEffect(() => {
+    if (!translateEnabled || !targetLanguage || messages.length === 0) return;
+    messages.forEach((msg) => {
+      if (!translations[msg.id] && !translating.has(msg.id)) {
+        translateText(msg.id, msg.content);
+      }
+    });
+  }, [translateEnabled, messages, targetLanguage, translateText]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -63,15 +110,25 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
             <ArrowLeft className="h-4 w-4" />
           </Button>
         )}
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 font-display text-sm font-semibold text-primary">
-          {conversation.otherUser.display_name.charAt(0).toUpperCase()}
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 font-display text-sm font-semibold text-primary overflow-hidden">
+          {conversation.otherUser.avatar_url ? (
+            <img src={conversation.otherUser.avatar_url} alt="" className="h-full w-full object-cover" />
+          ) : (
+            conversation.otherUser.display_name.charAt(0).toUpperCase()
+          )}
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <h3 className="text-sm font-semibold">{conversation.otherUser.display_name}</h3>
           <p className="text-xs font-mono user-code-badge inline-block rounded px-1.5 py-0.5">
             #{conversation.otherUser.user_code}
           </p>
         </div>
+        <TranslationSettings
+          enabled={translateEnabled}
+          targetLanguage={targetLanguage}
+          onToggle={setTranslateEnabled}
+          onLanguageChange={setTargetLanguage}
+        />
       </div>
 
       {/* Messages */}
@@ -85,6 +142,8 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
         ) : (
           messages.map((msg) => {
             const isMine = msg.sender_id === user?.id;
+            const translated = translations[msg.id];
+            const isTranslating = translating.has(msg.id);
             return (
               <div
                 key={msg.id}
@@ -98,6 +157,17 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
                   }`}
                 >
                   <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+                  {translateEnabled && (
+                    <div className="mt-1.5 border-t border-current/10 pt-1.5">
+                      {isTranslating ? (
+                        <span className="flex items-center gap-1 text-xs opacity-60">
+                          <Loader2 className="h-3 w-3 animate-spin" /> Translating...
+                        </span>
+                      ) : translated ? (
+                        <p className="text-xs italic opacity-80">{translated}</p>
+                      ) : null}
+                    </div>
+                  )}
                   <p
                     className={`mt-1 text-[10px] ${
                       isMine ? "text-primary-foreground/60" : "text-muted-foreground"
