@@ -172,6 +172,9 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
           </div>
         </button>
         <div className="flex gap-1">
+          <Button variant="ghost" size="icon" onClick={() => setShowArchived(!showArchived)} className={`h-8 w-8 ${showArchived ? 'text-primary' : ''}`} title={showArchived ? "Show chats" : "Show archived"}>
+            <Archive className="h-4 w-4" />
+          </Button>
           <Button variant="ghost" size="icon" onClick={() => setShowAddContact(true)} className="h-8 w-8">
             <UserPlus className="h-4 w-4" />
           </Button>
