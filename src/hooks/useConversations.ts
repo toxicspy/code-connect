@@ -37,9 +37,18 @@ export const useConversations = () => {
 
     const { data: allParticipants } = await supabase
       .from("conversation_participants")
-      .select("conversation_id, user_id")
+      .select("conversation_id, user_id, is_pinned, is_archived")
       .in("conversation_id", convIds)
       .neq("user_id", user.id);
+
+    // Also fetch current user's participation for pin/archive status
+    const { data: myParticipantDetails } = await supabase
+      .from("conversation_participants")
+      .select("conversation_id, is_pinned, is_archived")
+      .in("conversation_id", convIds)
+      .eq("user_id", user.id);
+
+    const myStatusMap = new Map(myParticipantDetails?.map((p) => [p.conversation_id, { is_pinned: p.is_pinned, is_archived: p.is_archived }]));
 
     if (!allParticipants?.length) {
       setConversations([]);
