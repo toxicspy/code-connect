@@ -131,9 +131,13 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
     }
   }, [user, refetch, onSelectConversation]);
 
-  const filtered = conversations.filter((c) =>
-    c.otherUser.display_name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = conversations
+    .filter((c) => (showArchived ? c.is_archived : !c.is_archived))
+    .filter((c) => c.otherUser.display_name.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
+      return 0;
+    });
 
   const copyCode = () => {
     if (profile?.user_code) {
