@@ -2,12 +2,17 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import ChatSidebar from "@/components/chat/ChatSidebar";
 import ChatView from "@/components/chat/ChatView";
+import AIChatView, { AIProfile } from "@/components/chat/AIChatView";
 import { ConversationWithDetails } from "@/hooks/useConversations";
 import Auth from "./Auth";
+
+type ChatMode = "human" | "ai";
 
 const Index = () => {
   const { user, loading } = useAuth();
   const [selectedConv, setSelectedConv] = useState<ConversationWithDetails | null>(null);
+  const [selectedAI, setSelectedAI] = useState<AIProfile | null>(null);
+  const [chatMode, setChatMode] = useState<ChatMode>("human");
   const [mobileShowChat, setMobileShowChat] = useState(false);
 
   if (loading) {
@@ -20,27 +25,36 @@ const Index = () => {
 
   if (!user) return <Auth />;
 
-  const handleSelect = (conv: ConversationWithDetails) => {
+  const handleSelectConv = (conv: ConversationWithDetails) => {
     setSelectedConv(conv);
+    setSelectedAI(null);
+    setChatMode("human");
+    setMobileShowChat(true);
+  };
+
+  const handleSelectAI = (profile: AIProfile) => {
+    setSelectedAI(profile);
+    setSelectedConv(null);
+    setChatMode("ai");
     setMobileShowChat(true);
   };
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      {/* Sidebar - hidden on mobile when chat is open */}
       <div className={`w-full md:w-[380px] shrink-0 ${mobileShowChat ? "hidden md:flex" : "flex"} flex-col`}>
         <ChatSidebar
-          selectedConversation={selectedConv?.id ?? null}
-          onSelectConversation={handleSelect}
+          selectedConversation={chatMode === "human" ? selectedConv?.id ?? null : null}
+          selectedAIProfileId={chatMode === "ai" ? selectedAI?.id ?? null : null}
+          onSelectConversation={handleSelectConv}
+          onSelectAIChat={handleSelectAI}
         />
       </div>
-
-      {/* Chat view */}
       <div className={`flex-1 ${!mobileShowChat ? "hidden md:flex" : "flex"} flex-col`}>
-        <ChatView
-          conversation={selectedConv}
-          onBack={() => setMobileShowChat(false)}
-        />
+        {chatMode === "ai" ? (
+          <AIChatView aiProfile={selectedAI} onBack={() => setMobileShowChat(false)} />
+        ) : (
+          <ChatView conversation={selectedConv} onBack={() => setMobileShowChat(false)} />
+        )}
       </div>
     </div>
   );
