@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import ShareContactDialog from "./ShareContactDialog";
 
 interface ConversationContextMenuProps {
   children: React.ReactNode;
@@ -17,6 +18,7 @@ interface ConversationContextMenuProps {
   isPinned: boolean;
   isArchived: boolean;
   otherUserName: string;
+  otherUserCode: string;
   onUpdate: () => void;
   onDelete?: () => void;
 }
@@ -27,11 +29,13 @@ const ConversationContextMenu = ({
   isPinned,
   isArchived,
   otherUserName,
+  otherUserCode,
   onUpdate,
   onDelete,
 }: ConversationContextMenuProps) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [showShare, setShowShare] = useState(false);
 
   const togglePin = async () => {
     if (!user || loading) return;
@@ -78,55 +82,50 @@ const ConversationContextMenu = ({
     setLoading(false);
   };
 
-  const shareContact = async () => {
-    const shareText = `Chat with ${otherUserName} on ChatFlow!`;
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: "ChatFlow", text: shareText });
-      } catch {
-        // user cancelled
-      }
-    } else {
-      await navigator.clipboard.writeText(shareText);
-      toast.success("Copied to clipboard!");
-    }
-  };
-
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem onClick={togglePin} disabled={loading}>
-          {isPinned ? (
-            <>
-              <PinOff className="mr-2 h-4 w-4" /> Unpin
-            </>
-          ) : (
-            <>
-              <Pin className="mr-2 h-4 w-4" /> Pin
-            </>
-          )}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={toggleArchive} disabled={loading}>
-          {isArchived ? (
-            <>
-              <ArchiveRestore className="mr-2 h-4 w-4" /> Unarchive
-            </>
-          ) : (
-            <>
-              <Archive className="mr-2 h-4 w-4" /> Archive
-            </>
-          )}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={shareContact}>
-          <Share2 className="mr-2 h-4 w-4" /> Share
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={deleteChat} disabled={loading} className="text-destructive focus:text-destructive">
-          <Trash2 className="mr-2 h-4 w-4" /> Delete chat
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuItem onClick={togglePin} disabled={loading}>
+            {isPinned ? (
+              <>
+                <PinOff className="mr-2 h-4 w-4" /> Unpin
+              </>
+            ) : (
+              <>
+                <Pin className="mr-2 h-4 w-4" /> Pin
+              </>
+            )}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={toggleArchive} disabled={loading}>
+            {isArchived ? (
+              <>
+                <ArchiveRestore className="mr-2 h-4 w-4" /> Unarchive
+              </>
+            ) : (
+              <>
+                <Archive className="mr-2 h-4 w-4" /> Archive
+              </>
+            )}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setShowShare(true)}>
+            <Share2 className="mr-2 h-4 w-4" /> Share
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={deleteChat} disabled={loading} className="text-destructive focus:text-destructive">
+            <Trash2 className="mr-2 h-4 w-4" /> Delete chat
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <ShareContactDialog
+        open={showShare}
+        onOpenChange={setShowShare}
+        sharedUserName={otherUserName}
+        sharedUserCode={otherUserCode}
+      />
+    </>
   );
 };
 
