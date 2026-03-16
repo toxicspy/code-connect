@@ -301,6 +301,7 @@ const ChatSidebar = ({ selectedConversation, onSelectConversation }: ChatSidebar
                 isPinned={conv.is_pinned}
                 isArchived={conv.is_archived}
                 otherUserName={conv.otherUser.display_name}
+                otherUserCode={conv.otherUser.user_code}
                 onUpdate={refetch}
                 onDelete={selectedConversation === conv.id ? () => onSelectConversation(null as any) : undefined}
               >
