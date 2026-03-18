@@ -94,19 +94,13 @@ const AIChatView = ({ aiProfile, onBack }: AIChatViewProps) => {
     return () => { cancelled = true; };
   }, [translateEnabled, targetLanguage, messages, translations, translating, failedTranslations, isRateLimited, translateText]);
 
-  const handleSend = async () => {
-    if (!input.trim() || streaming) return;
-    const text = input;
-    setInput("");
+  const handleSend = async (text: string) => {
+    if (streaming) return;
     try {
-      await sendMessage(text, aiProfile?.system_prompt || "You are a helpful AI assistant.");
+      await sendMessage(text, aiProfile?.system_prompt || "You are a warm, friendly AI companion. Keep replies SHORT — 1 to 3 sentences max. Be concise, punchy, and fun.");
     } catch (err: any) {
       toast.error(err.message || "Failed to get AI response");
     }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
   if (!aiProfile) {
