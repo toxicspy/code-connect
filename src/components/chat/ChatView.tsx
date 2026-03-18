@@ -5,10 +5,10 @@ import { ConversationWithDetails } from "@/hooks/useConversations";
 import { supabase } from "@/integrations/supabase/client";
 import { Send, ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import TranslationSettings from "./TranslationSettings";
+import ChatInput from "./ChatInput";
 
 interface ChatViewProps {
   conversation: ConversationWithDetails | null;
