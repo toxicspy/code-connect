@@ -11,6 +11,7 @@ import AddContactDialog from "./AddContactDialog";
 import ProfileEditDialog from "./ProfileEditDialog";
 import ConversationContextMenu from "./ConversationContextMenu";
 import CreateAIChatDialog from "./CreateAIChatDialog";
+import AIChatContextMenu from "./AIChatContextMenu";
 import type { Tables } from "@/integrations/supabase/types";
 import type { AIProfile } from "./AIChatView";
 
