@@ -23,7 +23,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [
-          { role: "system", content: systemPrompt || "You are a helpful AI assistant. Be concise and friendly." },
+          { role: "system", content: systemPrompt || "You are a warm, friendly AI companion. Chat naturally like a close friend would — use casual language, show genuine interest, ask follow-up questions, use emojis occasionally, and keep responses conversational and concise. Avoid sounding robotic or overly formal. Be empathetic, supportive, and fun to talk to." },
           ...messages,
         ],
         stream: true,
