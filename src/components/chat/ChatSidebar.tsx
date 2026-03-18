@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useConversations, ConversationWithDetails } from "@/hooks/useConversations";
 import { supabase } from "@/integrations/supabase/client";
-import { Search, UserPlus, LogOut, Copy, MessageCircle, Loader2, MoreVertical, Archive, Pin, Bot, Plus, Trash2 } from "lucide-react";
+import { Search, UserPlus, LogOut, Copy, MessageCircle, Loader2, MoreVertical, Archive, Pin, Bot, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
@@ -11,6 +11,7 @@ import AddContactDialog from "./AddContactDialog";
 import ProfileEditDialog from "./ProfileEditDialog";
 import ConversationContextMenu from "./ConversationContextMenu";
 import CreateAIChatDialog from "./CreateAIChatDialog";
+import AIChatContextMenu from "./AIChatContextMenu";
 import type { Tables } from "@/integrations/supabase/types";
 import type { AIProfile } from "./AIChatView";
 
@@ -105,11 +106,9 @@ const ChatSidebar = ({ selectedConversation, selectedAIProfileId, onSelectConver
     }
   }, [user, refetch, onSelectConversation]);
 
-  const deleteAIProfile = async (id: string) => {
-    const { error } = await supabase.from("ai_chat_profiles").delete().eq("id", id);
-    if (error) { toast.error("Failed to delete"); return; }
+  const removeAIProfile = (id: string) => {
     setAiProfiles((prev) => prev.filter((p) => p.id !== id));
-    toast.success("AI chat deleted");
+    if (selectedAIProfileId === id) onSelectAIChat?.({} as any);
   };
 
   const filtered = conversations
@@ -216,21 +215,27 @@ const ChatSidebar = ({ selectedConversation, selectedAIProfileId, onSelectConver
                 className={`group relative flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 ${selectedAIProfileId === ai.id ? "bg-accent" : ""}`}
               >
                 <button onClick={() => onSelectAIChat?.(ai)} className="flex flex-1 items-center gap-3 min-w-0">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <Bot className="h-5 w-5" />
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary overflow-hidden">
+                    {ai.avatar_url ? (
+                      <img src={ai.avatar_url} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <Bot className="h-5 w-5" />
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <span className="text-sm font-medium truncate block">{ai.name}</span>
                     <span className="text-xs text-muted-foreground truncate block">{ai.system_prompt?.slice(0, 40)}...</span>
                   </div>
                 </button>
-                <button
-                  onClick={() => deleteAIProfile(ai.id)}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10"
-                  title="Delete AI chat"
+                <AIChatContextMenu
+                  aiProfileId={ai.id}
+                  aiName={ai.name}
+                  onDelete={() => removeAIProfile(ai.id)}
                 >
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </button>
+                  <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-muted">
+                    <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                  </button>
+                </AIChatContextMenu>
               </div>
             ))
           )
