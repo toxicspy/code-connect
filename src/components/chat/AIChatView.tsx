@@ -25,7 +25,7 @@ interface AIChatViewProps {
 const AIChatView = ({ aiProfile, onBack }: AIChatViewProps) => {
   const { user } = useAuth();
   const { messages, loading, streaming, sendMessage } = useAIChatMessages(aiProfile?.id ?? null);
-  const [input, setInput] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Translation state
