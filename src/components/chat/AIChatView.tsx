@@ -212,21 +212,11 @@ const AIChatView = ({ aiProfile, onBack }: AIChatViewProps) => {
       </div>
 
       {/* Input */}
-      <div className="border-t chat-input-bg px-4 py-3">
-        <div className="flex gap-2">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={`Message ${aiProfile.name}...`}
-            className="flex-1 bg-muted border-0"
-            disabled={streaming}
-          />
-          <Button onClick={handleSend} disabled={!input.trim() || streaming} size="icon" className="shrink-0">
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+      <ChatInput
+        onSend={handleSend}
+        placeholder={`Message ${aiProfile.name}...`}
+        disabled={streaming}
+      />
     </div>
   );
 };
