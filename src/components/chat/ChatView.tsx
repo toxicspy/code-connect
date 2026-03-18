@@ -124,18 +124,8 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
     };
   }, [translateEnabled, targetLanguage, messages, translations, translating, failedTranslations, isRateLimited, translateText]);
 
-  const handleSend = async () => {
-    if (!input.trim()) return;
-    const text = input;
-    setInput("");
+  const handleSend = async (text: string) => {
     await sendMessage(text);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
   };
 
   if (!conversation) {
