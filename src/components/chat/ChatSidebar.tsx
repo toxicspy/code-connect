@@ -105,11 +105,9 @@ const ChatSidebar = ({ selectedConversation, selectedAIProfileId, onSelectConver
     }
   }, [user, refetch, onSelectConversation]);
 
-  const deleteAIProfile = async (id: string) => {
-    const { error } = await supabase.from("ai_chat_profiles").delete().eq("id", id);
-    if (error) { toast.error("Failed to delete"); return; }
+  const removeAIProfile = (id: string) => {
     setAiProfiles((prev) => prev.filter((p) => p.id !== id));
-    toast.success("AI chat deleted");
+    if (selectedAIProfileId === id) onSelectAIChat?.({} as any);
   };
 
   const filtered = conversations
