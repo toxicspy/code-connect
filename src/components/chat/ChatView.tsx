@@ -5,10 +5,10 @@ import { ConversationWithDetails } from "@/hooks/useConversations";
 import { supabase } from "@/integrations/supabase/client";
 import { Send, ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import TranslationSettings from "./TranslationSettings";
+import ChatInput from "./ChatInput";
 
 interface ChatViewProps {
   conversation: ConversationWithDetails | null;
@@ -18,7 +18,6 @@ interface ChatViewProps {
 const ChatView = ({ conversation, onBack }: ChatViewProps) => {
   const { user } = useAuth();
   const { messages, loading, sendMessage } = useMessages(conversation?.id ?? null);
-  const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Translation state
@@ -124,18 +123,8 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
     };
   }, [translateEnabled, targetLanguage, messages, translations, translating, failedTranslations, isRateLimited, translateText]);
 
-  const handleSend = async () => {
-    if (!input.trim()) return;
-    const text = input;
-    setInput("");
+  const handleSend = async (text: string) => {
     await sendMessage(text);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
   };
 
   if (!conversation) {
@@ -236,20 +225,7 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
       </div>
 
       {/* Input */}
-      <div className="border-t chat-input-bg px-4 py-3">
-        <div className="flex gap-2">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type a message..."
-            className="flex-1 bg-muted border-0"
-          />
-          <Button onClick={handleSend} disabled={!input.trim()} size="icon" className="shrink-0">
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+      <ChatInput onSend={handleSend} />
     </div>
   );
 };
