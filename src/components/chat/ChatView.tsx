@@ -226,20 +226,7 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
       </div>
 
       {/* Input */}
-      <div className="border-t chat-input-bg px-4 py-3">
-        <div className="flex gap-2">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type a message..."
-            className="flex-1 bg-muted border-0"
-          />
-          <Button onClick={handleSend} disabled={!input.trim()} size="icon" className="shrink-0">
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+      <ChatInput onSend={handleSend} />
     </div>
   );
 };
