@@ -18,7 +18,7 @@ interface ChatViewProps {
 const ChatView = ({ conversation, onBack }: ChatViewProps) => {
   const { user } = useAuth();
   const { messages, loading, sendMessage } = useMessages(conversation?.id ?? null);
-  const [input, setInput] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Translation state
