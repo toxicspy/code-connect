@@ -86,7 +86,11 @@ const TranslatedAudioButton = ({ text, language }: TranslatedAudioButtonProps) =
       type="button"
       variant="ghost"
       size="icon"
-      className="h-6 w-6 shrink-0 rounded-full text-current opacity-70 transition-opacity hover:opacity-100"
+      className={`h-7 w-7 shrink-0 rounded-full transition-all ${
+        isSpeaking
+          ? "bg-primary text-primary-foreground shadow-md shadow-primary/30 scale-110"
+          : "bg-primary/20 text-primary hover:bg-primary/30 hover:scale-105"
+      }`}
       onClick={handleSpeak}
       aria-label={isSpeaking ? "Stop translated audio" : `Play translated audio in ${language}`}
       title={isSpeaking ? "Stop" : `Listen in ${language}`}
