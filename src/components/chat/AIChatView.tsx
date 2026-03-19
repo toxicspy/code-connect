@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import TranslationSettings from "./TranslationSettings";
 import ChatInput from "./ChatInput";
 import ReactMarkdown from "react-markdown";
+import TranslatedAudioButton from "./TranslatedAudioButton";
 
 export interface AIProfile {
   id: string;

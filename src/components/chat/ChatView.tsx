@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import TranslationSettings from "./TranslationSettings";
 import ChatInput from "./ChatInput";
+import TranslatedAudioButton from "./TranslatedAudioButton";
 
 interface ChatViewProps {
   conversation: ConversationWithDetails | null;
