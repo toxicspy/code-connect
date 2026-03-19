@@ -82,21 +82,19 @@ const TranslatedAudioButton = ({ text, language }: TranslatedAudioButtonProps) =
   };
 
   return (
-    <Button
+    <button
       type="button"
-      variant="ghost"
-      size="icon"
-      className={`h-7 w-7 shrink-0 rounded-full transition-all ${
-        isSpeaking
-          ? "bg-primary text-primary-foreground shadow-md shadow-primary/30 scale-110"
-          : "bg-primary/20 text-primary hover:bg-primary/30 hover:scale-105"
-      }`}
       onClick={handleSpeak}
       aria-label={isSpeaking ? "Stop translated audio" : `Play translated audio in ${language}`}
       title={isSpeaking ? "Stop" : `Listen in ${language}`}
+      className={`inline-flex items-center justify-center h-8 w-8 shrink-0 rounded-full border-2 transition-all ${
+        isSpeaking
+          ? "bg-primary border-primary text-primary-foreground shadow-lg shadow-primary/40 scale-110 animate-pulse"
+          : "bg-primary border-primary/80 text-primary-foreground hover:shadow-lg hover:shadow-primary/30 hover:scale-110"
+      }`}
     >
-      {isSpeaking ? <Square className="h-3.5 w-3.5 fill-current" /> : <Volume2 className="h-3.5 w-3.5" />}
-    </Button>
+      {isSpeaking ? <Square className="h-4 w-4 fill-current" /> : <Volume2 className="h-4 w-4" />}
+    </button>
   );
 };
 
