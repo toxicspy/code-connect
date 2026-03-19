@@ -201,14 +201,14 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
                 >
                   <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
                   {translateEnabled && (
-                    <div className="mt-1.5 border-t border-current/10 pt-1.5">
+                    <div className="mt-1.5 pt-1.5">
                       {isTranslating ? (
                         <span className="flex items-center gap-1 text-xs opacity-60">
                           <Loader2 className="h-3 w-3 animate-spin" /> Translating...
                         </span>
                       ) : translated ? (
-                        <div className="flex items-start gap-1.5">
-                          <p className="flex-1 text-xs italic opacity-80">{translated}</p>
+                        <div className="flex items-center gap-1.5 rounded-lg bg-accent/40 px-2.5 py-1.5">
+                          <p className="flex-1 text-xs font-bold text-accent-foreground">{translated}</p>
                           <TranslatedAudioButton text={translated} language={targetLanguage} />
                         </div>
                       ) : null}
