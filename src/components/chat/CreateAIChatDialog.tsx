@@ -71,7 +71,7 @@ const CreateAIChatDialog = ({ open, onOpenChange, onCreated }: CreateAIChatDialo
       onCreated(data);
       onOpenChange(false);
       setName("AI Assistant");
-      setSystemPrompt("You are a helpful AI assistant. Be concise and friendly.");
+      setSystemPrompt("Be a warm, friendly AI companion. Talk in a natural, caring, easy-to-grasp way and keep replies short, usually 1 or 2 sentences unless the user asks for more detail.");
       setAvatarFile(null);
       setAvatarPreview(null);
     } catch (err: any) {
