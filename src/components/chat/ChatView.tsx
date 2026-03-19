@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import TranslationSettings from "./TranslationSettings";
 import ChatInput from "./ChatInput";
+import TranslatedAudioButton from "./TranslatedAudioButton";
 
 interface ChatViewProps {
   conversation: ConversationWithDetails | null;
@@ -206,7 +207,10 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
                           <Loader2 className="h-3 w-3 animate-spin" /> Translating...
                         </span>
                       ) : translated ? (
-                        <p className="text-xs italic opacity-80">{translated}</p>
+                        <div className="flex items-start gap-1.5">
+                          <p className="flex-1 text-xs italic opacity-80">{translated}</p>
+                          <TranslatedAudioButton text={translated} language={targetLanguage} />
+                        </div>
                       ) : null}
                     </div>
                   )}

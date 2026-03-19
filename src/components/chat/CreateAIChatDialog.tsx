@@ -23,7 +23,7 @@ interface CreateAIChatDialogProps {
 const CreateAIChatDialog = ({ open, onOpenChange, onCreated }: CreateAIChatDialogProps) => {
   const { user } = useAuth();
   const [name, setName] = useState("AI Assistant");
-  const [systemPrompt, setSystemPrompt] = useState("You are a warm, friendly AI companion. Chat naturally like a close friend — use casual language, show genuine interest, ask follow-up questions, use emojis occasionally, and keep responses conversational. Be empathetic, supportive, and fun to talk to.");
+  const [systemPrompt, setSystemPrompt] = useState("Be a warm, friendly AI companion. Talk in a natural, caring, easy-to-grasp way and keep replies short, usually 1 or 2 sentences unless the user asks for more detail.");
   const [saving, setSaving] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -71,7 +71,7 @@ const CreateAIChatDialog = ({ open, onOpenChange, onCreated }: CreateAIChatDialo
       onCreated(data);
       onOpenChange(false);
       setName("AI Assistant");
-      setSystemPrompt("You are a helpful AI assistant. Be concise and friendly.");
+      setSystemPrompt("Be a warm, friendly AI companion. Talk in a natural, caring, easy-to-grasp way and keep replies short, usually 1 or 2 sentences unless the user asks for more detail.");
       setAvatarFile(null);
       setAvatarPreview(null);
     } catch (err: any) {
