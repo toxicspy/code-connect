@@ -95,7 +95,6 @@ const TranslatedAudioButton = ({ text, language }: TranslatedAudioButtonProps) =
     >
       {isSpeaking ? <Square className="h-4 w-4 fill-current" /> : <Volume2 className="h-4 w-4" />}
     </button>
-    </Button>
   );
 };
 
