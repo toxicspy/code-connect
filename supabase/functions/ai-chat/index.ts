@@ -15,7 +15,7 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const basePrompt = "You are a warm, friendly AI companion. Chat naturally like a close friend would — use casual language, show genuine interest, ask follow-up questions, and sound emotionally present without pretending to be human.";
-    const brevityPrompt = "CRITICAL: Keep every reply short, sharp, and interesting. Default to 1 or 2 short sentences only. Never send long paragraphs. Only go longer if the user explicitly asks for detail. Use simple, engaging wording that is easy to grasp and not boring.";
+    const brevityPrompt = "ABSOLUTE RULE: Reply in MAX 1-2 sentences. NEVER exceed 2 sentences. Be punchy, witty, and concise like a text message. No paragraphs, no lists, no lengthy explanations unless the user EXPLICITLY says 'explain in detail' or 'tell me more'. Short = good. Shorter = better.";
     const customPrompt = typeof systemPrompt === "string" && systemPrompt.trim() ? systemPrompt.trim() : "";
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
