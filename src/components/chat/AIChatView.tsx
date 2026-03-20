@@ -10,6 +10,7 @@ import TranslationSettings from "./TranslationSettings";
 import ChatInput from "./ChatInput";
 import ReactMarkdown from "react-markdown";
 import TranslatedAudioButton from "./TranslatedAudioButton";
+import MessageActionBar from "./MessageActionBar";
 
 export interface AIProfile {
   id: string;
@@ -28,6 +29,10 @@ const AIChatView = ({ aiProfile, onBack }: AIChatViewProps) => {
   const { messages, loading, streaming, sendMessage } = useAIChatMessages(aiProfile?.id ?? null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Selection state
+  const [selectedMsgId, setSelectedMsgId] = useState<string | null>(null);
+  const [starredIds, setStarredIds] = useState<Set<string>>(new Set());
+
   // Translation state
   const [translateEnabled, setTranslateEnabled] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState("Kannada");
@@ -38,10 +43,26 @@ const AIChatView = ({ aiProfile, onBack }: AIChatViewProps) => {
   const processingRef = useRef(false);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
+
+  // Fetch starred AI messages
+  useEffect(() => {
+    if (!user || !aiProfile?.id) return;
+    const fetchStarred = async () => {
+      const msgIds = messages.map((m) => m.id);
+      if (msgIds.length === 0) return;
+      const { data } = await supabase
+        .from("starred_messages")
+        .select("ai_message_id")
+        .eq("user_id", user.id)
+        .in("ai_message_id", msgIds);
+      setStarredIds(new Set(data?.map((d: any) => d.ai_message_id) || []));
+    };
+    fetchStarred();
+  }, [user, aiProfile?.id, messages]);
+
+  useEffect(() => { setSelectedMsgId(null); }, [aiProfile?.id]);
 
   useEffect(() => {
     setTranslations({});
@@ -58,11 +79,7 @@ const AIChatView = ({ aiProfile, onBack }: AIChatViewProps) => {
       const { data, error } = await supabase.functions.invoke("translate", { body: { text, targetLanguage } });
       const responseError = error?.message || data?.error;
       if (responseError) {
-        if (responseError.includes("429") || responseError.toLowerCase().includes("rate limit")) {
-          setIsRateLimited(true);
-          toast.error("Too many translation requests. Please wait.");
-          return "rate_limited" as const;
-        }
+        if (responseError.includes("429") || responseError.toLowerCase().includes("rate limit")) { setIsRateLimited(true); toast.error("Too many translation requests."); return "rate_limited" as const; }
         setFailedTranslations((prev) => new Set(prev).add(msgId));
         return "failed" as const;
       }
@@ -98,11 +115,13 @@ const AIChatView = ({ aiProfile, onBack }: AIChatViewProps) => {
   const handleSend = async (text: string) => {
     if (streaming) return;
     try {
-      await sendMessage(text, aiProfile?.system_prompt || "You are a warm, friendly AI companion. Keep replies SHORT — 1 to 3 sentences max. Be concise, punchy, and fun.");
+      await sendMessage(text, aiProfile?.system_prompt || "You are a warm, friendly AI companion. Keep replies SHORT — 1 to 2 sentences max.");
     } catch (err: any) {
       toast.error(err.message || "Failed to get AI response");
     }
   };
+
+  const selectedMsg = messages.find((m) => m.id === selectedMsgId);
 
   if (!aiProfile) {
     return (
@@ -110,43 +129,59 @@ const AIChatView = ({ aiProfile, onBack }: AIChatViewProps) => {
         <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
           <Bot className="h-8 w-8 text-primary/40" />
         </div>
-        <h3 className="mt-4 font-display text-lg font-semibold text-muted-foreground">
-          Select or create an AI chat
-        </h3>
-        <p className="mt-1 text-sm text-muted-foreground/60">
-          Create a custom AI assistant to start chatting
-        </p>
+        <h3 className="mt-4 font-display text-lg font-semibold text-muted-foreground">Select or create an AI chat</h3>
+        <p className="mt-1 text-sm text-muted-foreground/60">Create a custom AI assistant to start chatting</p>
       </div>
     );
   }
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="flex items-center gap-3 border-b chat-header-bg px-4 py-3">
-        {onBack && (
-          <Button variant="ghost" size="icon" onClick={onBack} className="h-8 w-8 md:hidden">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        )}
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 font-display text-sm font-semibold text-primary overflow-hidden">
-          {aiProfile.avatar_url ? (
-            <img src={aiProfile.avatar_url} alt="" className="h-full w-full object-cover" />
-          ) : (
-            <Bot className="h-5 w-5" />
-          )}
-        </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold">{aiProfile.name}</h3>
-          <p className="text-xs text-muted-foreground">AI Assistant</p>
-        </div>
-        <TranslationSettings
-          enabled={translateEnabled}
-          targetLanguage={targetLanguage}
-          onToggle={setTranslateEnabled}
-          onLanguageChange={setTargetLanguage}
+      {/* Action bar when message selected */}
+      {selectedMsg ? (
+        <MessageActionBar
+          selectedMessageId={selectedMsg.id}
+          messageContent={selectedMsg.content}
+          isMine={selectedMsg.role === "user"}
+          isStarred={starredIds.has(selectedMsg.id)}
+          chatType="ai"
+          onDeselect={() => setSelectedMsgId(null)}
+          onDeleted={() => {
+            setSelectedMsgId(null);
+            window.location.reload();
+          }}
+          onStarToggled={() => {
+            setStarredIds((prev) => {
+              const next = new Set(prev);
+              if (next.has(selectedMsg.id)) next.delete(selectedMsg.id);
+              else next.add(selectedMsg.id);
+              return next;
+            });
+            setSelectedMsgId(null);
+          }}
         />
-      </div>
+      ) : (
+        /* Header */
+        <div className="flex items-center gap-3 border-b chat-header-bg px-4 py-3">
+          {onBack && (
+            <Button variant="ghost" size="icon" onClick={onBack} className="h-8 w-8 md:hidden">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          )}
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 font-display text-sm font-semibold text-primary overflow-hidden">
+            {aiProfile.avatar_url ? (
+              <img src={aiProfile.avatar_url} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <Bot className="h-5 w-5" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-semibold">{aiProfile.name}</h3>
+            <p className="text-xs text-muted-foreground">AI Assistant</p>
+          </div>
+          <TranslationSettings enabled={translateEnabled} targetLanguage={targetLanguage} onToggle={setTranslateEnabled} onLanguageChange={setTargetLanguage} />
+        </div>
+      )}
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto chat-area-bg px-4 py-4 space-y-2">
@@ -162,12 +197,17 @@ const AIChatView = ({ aiProfile, onBack }: AIChatViewProps) => {
             const isMine = msg.role === "user";
             const translated = translations[msg.id];
             const isTranslatingMsg = translating.has(msg.id);
+            const isSelected = selectedMsgId === msg.id;
             return (
-              <div key={msg.id} className={`flex animate-message-in ${isMine ? "justify-end" : "justify-start"}`}>
+              <div
+                key={msg.id}
+                className={`flex animate-message-in ${isMine ? "justify-end" : "justify-start"}`}
+                onClick={() => setSelectedMsgId(isSelected ? null : msg.id)}
+              >
                 <div
-                  className={`max-w-[75%] rounded-2xl px-4 py-2.5 shadow-sm ${
+                  className={`max-w-[75%] rounded-2xl px-4 py-2.5 shadow-sm cursor-pointer transition-all ${
                     isMine ? "chat-bubble-sent rounded-br-md" : "chat-bubble-received rounded-bl-md"
-                  }`}
+                  } ${isSelected ? "ring-2 ring-primary scale-[1.02]" : ""}`}
                 >
                   {isMine ? (
                     <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
@@ -192,6 +232,7 @@ const AIChatView = ({ aiProfile, onBack }: AIChatViewProps) => {
                   )}
                   <p className={`mt-1 text-[10px] ${isMine ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
                     {format(new Date(msg.created_at), "HH:mm")}
+                    {starredIds.has(msg.id) && " ⭐"}
                   </p>
                 </div>
               </div>
@@ -208,12 +249,7 @@ const AIChatView = ({ aiProfile, onBack }: AIChatViewProps) => {
         )}
       </div>
 
-      {/* Input */}
-      <ChatInput
-        onSend={handleSend}
-        placeholder={`Message ${aiProfile.name}...`}
-        disabled={streaming}
-      />
+      <ChatInput onSend={handleSend} placeholder={`Message ${aiProfile.name}...`} disabled={streaming} />
     </div>
   );
 };

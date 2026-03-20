@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import TranslationSettings from "./TranslationSettings";
 import ChatInput from "./ChatInput";
 import TranslatedAudioButton from "./TranslatedAudioButton";
+import MessageActionBar from "./MessageActionBar";
 
 interface ChatViewProps {
   conversation: ConversationWithDetails | null;
@@ -21,6 +22,10 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
   const { messages, loading, sendMessage } = useMessages(conversation?.id ?? null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Selection state
+  const [selectedMsgId, setSelectedMsgId] = useState<string | null>(null);
+  const [starredIds, setStarredIds] = useState<Set<string>>(new Set());
+
   // Translation state
   const [translateEnabled, setTranslateEnabled] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState("Kannada");
@@ -31,12 +36,30 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
   const processingRef = useRef(false);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
-  // Reset translations when conversation/language changes or translation is toggled off
+  // Fetch starred messages
+  useEffect(() => {
+    if (!user || !conversation?.id) return;
+    const fetchStarred = async () => {
+      const msgIds = messages.map((m) => m.id);
+      if (msgIds.length === 0) return;
+      const { data } = await supabase
+        .from("starred_messages")
+        .select("message_id")
+        .eq("user_id", user.id)
+        .in("message_id", msgIds);
+      setStarredIds(new Set(data?.map((d: any) => d.message_id) || []));
+    };
+    fetchStarred();
+  }, [user, conversation?.id, messages]);
+
+  // Reset on conversation change
+  useEffect(() => {
+    setSelectedMsgId(null);
+  }, [conversation?.id]);
+
   useEffect(() => {
     setTranslations({});
     setTranslating(new Set());
@@ -46,62 +69,36 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
   }, [conversation?.id, translateEnabled, targetLanguage]);
 
   const translateText = useCallback(async (msgId: string, text: string) => {
-    if (translations[msgId] || translating.has(msgId) || failedTranslations.has(msgId)) {
-      return "skip" as const;
-    }
-
+    if (translations[msgId] || translating.has(msgId) || failedTranslations.has(msgId)) return "skip" as const;
     setTranslating((prev) => new Set(prev).add(msgId));
     try {
-      const { data, error } = await supabase.functions.invoke("translate", {
-        body: { text, targetLanguage },
-      });
-
+      const { data, error } = await supabase.functions.invoke("translate", { body: { text, targetLanguage } });
       const responseError = error?.message || data?.error;
       if (responseError) {
         const is429 = responseError.includes("429") || responseError.toLowerCase().includes("rate limit");
-        if (is429) {
-          setIsRateLimited(true);
-          toast.error("Too many translation requests. Please wait a moment and toggle translate on again.");
-          return "rate_limited" as const;
-        }
+        if (is429) { setIsRateLimited(true); toast.error("Too many translation requests."); return "rate_limited" as const; }
         setFailedTranslations((prev) => new Set(prev).add(msgId));
         return "failed" as const;
       }
-
       setTranslations((prev) => ({ ...prev, [msgId]: data.translated }));
       return "ok" as const;
     } catch (e: any) {
       const msg = String(e?.message || "");
-      const is429 = msg.includes("429") || msg.toLowerCase().includes("rate limit");
-      if (is429) {
-        setIsRateLimited(true);
-        toast.error("Too many translation requests. Please wait a moment and toggle translate on again.");
-        return "rate_limited" as const;
-      }
+      if (msg.includes("429") || msg.toLowerCase().includes("rate limit")) { setIsRateLimited(true); toast.error("Too many translation requests."); return "rate_limited" as const; }
       setFailedTranslations((prev) => new Set(prev).add(msgId));
       return "failed" as const;
     } finally {
-      setTranslating((prev) => {
-        const next = new Set(prev);
-        next.delete(msgId);
-        return next;
-      });
+      setTranslating((prev) => { const next = new Set(prev); next.delete(msgId); return next; });
     }
   }, [targetLanguage, translations, translating, failedTranslations]);
 
-  // Translate messages sequentially with throttling (single queue worker)
   useEffect(() => {
     if (!translateEnabled || !targetLanguage || messages.length === 0 || isRateLimited) return;
     if (processingRef.current) return;
-
-    const untranslated = messages.filter(
-      (msg) => !translations[msg.id] && !translating.has(msg.id) && !failedTranslations.has(msg.id)
-    );
+    const untranslated = messages.filter((msg) => !translations[msg.id] && !translating.has(msg.id) && !failedTranslations.has(msg.id));
     if (untranslated.length === 0) return;
-
     let cancelled = false;
     processingRef.current = true;
-
     const processQueue = async () => {
       for (const msg of untranslated) {
         if (cancelled) break;
@@ -110,23 +107,13 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
         if (!cancelled) await new Promise((r) => setTimeout(r, 2000));
       }
     };
-
-    processQueue()
-      .catch((err) => {
-        console.error("Translation queue failed:", err);
-      })
-      .finally(() => {
-        processingRef.current = false;
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    processQueue().catch(console.error).finally(() => { processingRef.current = false; });
+    return () => { cancelled = true; };
   }, [translateEnabled, targetLanguage, messages, translations, translating, failedTranslations, isRateLimited, translateText]);
 
-  const handleSend = async (text: string) => {
-    await sendMessage(text);
-  };
+  const handleSend = async (text: string) => { await sendMessage(text); };
+
+  const selectedMsg = messages.find((m) => m.id === selectedMsgId);
 
   if (!conversation) {
     return (
@@ -134,70 +121,83 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
         <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
           <Send className="h-8 w-8 text-primary/40" />
         </div>
-        <h3 className="mt-4 font-display text-lg font-semibold text-muted-foreground">
-          Select a chat to start messaging
-        </h3>
-        <p className="mt-1 text-sm text-muted-foreground/60">
-          Or add a new contact using their unique code
-        </p>
+        <h3 className="mt-4 font-display text-lg font-semibold text-muted-foreground">Select a chat to start messaging</h3>
+        <p className="mt-1 text-sm text-muted-foreground/60">Or add a new contact using their unique code</p>
       </div>
     );
   }
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="flex items-center gap-3 border-b chat-header-bg px-4 py-3">
-        {onBack && (
-          <Button variant="ghost" size="icon" onClick={onBack} className="h-8 w-8 md:hidden">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        )}
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 font-display text-sm font-semibold text-primary overflow-hidden">
-          {conversation.otherUser.avatar_url ? (
-            <img src={conversation.otherUser.avatar_url} alt="" className="h-full w-full object-cover" />
-          ) : (
-            conversation.otherUser.display_name.charAt(0).toUpperCase()
-          )}
-        </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold">{conversation.otherUser.display_name}</h3>
-          <p className="text-xs font-mono user-code-badge inline-block rounded px-1.5 py-0.5">
-            #{conversation.otherUser.user_code}
-          </p>
-        </div>
-        <TranslationSettings
-          enabled={translateEnabled}
-          targetLanguage={targetLanguage}
-          onToggle={setTranslateEnabled}
-          onLanguageChange={setTargetLanguage}
+      {/* Action bar when message selected */}
+      {selectedMsg ? (
+        <MessageActionBar
+          selectedMessageId={selectedMsg.id}
+          messageContent={selectedMsg.content}
+          isMine={selectedMsg.sender_id === user?.id}
+          isStarred={starredIds.has(selectedMsg.id)}
+          chatType="normal"
+          onDeselect={() => setSelectedMsgId(null)}
+          onDeleted={() => {
+            setSelectedMsgId(null);
+            // Message will disappear via realtime or we force refetch
+            window.location.reload();
+          }}
+          onStarToggled={() => {
+            setStarredIds((prev) => {
+              const next = new Set(prev);
+              if (next.has(selectedMsg.id)) next.delete(selectedMsg.id);
+              else next.add(selectedMsg.id);
+              return next;
+            });
+            setSelectedMsgId(null);
+          }}
         />
-      </div>
+      ) : (
+        /* Normal Header */
+        <div className="flex items-center gap-3 border-b chat-header-bg px-4 py-3">
+          {onBack && (
+            <Button variant="ghost" size="icon" onClick={onBack} className="h-8 w-8 md:hidden">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          )}
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 font-display text-sm font-semibold text-primary overflow-hidden">
+            {conversation.otherUser.avatar_url ? (
+              <img src={conversation.otherUser.avatar_url} alt="" className="h-full w-full object-cover" />
+            ) : (
+              conversation.otherUser.display_name.charAt(0).toUpperCase()
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-semibold">{conversation.otherUser.display_name}</h3>
+            <p className="text-xs font-mono user-code-badge inline-block rounded px-1.5 py-0.5">#{conversation.otherUser.user_code}</p>
+          </div>
+          <TranslationSettings enabled={translateEnabled} targetLanguage={targetLanguage} onToggle={setTranslateEnabled} onLanguageChange={setTargetLanguage} />
+        </div>
+      )}
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto chat-area-bg px-4 py-4 space-y-2">
         {loading ? (
           <div className="flex justify-center py-8 text-sm text-muted-foreground">Loading messages...</div>
         ) : messages.length === 0 ? (
-          <div className="flex justify-center py-8 text-sm text-muted-foreground">
-            No messages yet. Say hello! 👋
-          </div>
+          <div className="flex justify-center py-8 text-sm text-muted-foreground">No messages yet. Say hello! 👋</div>
         ) : (
           messages.map((msg) => {
             const isMine = msg.sender_id === user?.id;
             const translated = translations[msg.id];
             const isTranslating = translating.has(msg.id);
+            const isSelected = selectedMsgId === msg.id;
             return (
               <div
                 key={msg.id}
                 className={`flex animate-message-in ${isMine ? "justify-end" : "justify-start"}`}
+                onClick={() => setSelectedMsgId(isSelected ? null : msg.id)}
               >
                 <div
-                  className={`max-w-[75%] rounded-2xl px-4 py-2.5 shadow-sm ${
-                    isMine
-                      ? "chat-bubble-sent rounded-br-md"
-                      : "chat-bubble-received rounded-bl-md"
-                  }`}
+                  className={`max-w-[75%] rounded-2xl px-4 py-2.5 shadow-sm cursor-pointer transition-all ${
+                    isMine ? "chat-bubble-sent rounded-br-md" : "chat-bubble-received rounded-bl-md"
+                  } ${isSelected ? "ring-2 ring-primary scale-[1.02]" : ""}`}
                 >
                   <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
                   {translateEnabled && (
@@ -214,12 +214,9 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
                       ) : null}
                     </div>
                   )}
-                  <p
-                    className={`mt-1 text-[10px] ${
-                      isMine ? "text-primary-foreground/60" : "text-muted-foreground"
-                    }`}
-                  >
+                  <p className={`mt-1 text-[10px] ${isMine ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
                     {format(new Date(msg.created_at), "HH:mm")}
+                    {starredIds.has(msg.id) && " ⭐"}
                   </p>
                 </div>
               </div>
@@ -228,7 +225,6 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
         )}
       </div>
 
-      {/* Input */}
       <ChatInput onSend={handleSend} />
     </div>
   );
