@@ -227,6 +227,45 @@ export type Database = {
         }
         Relationships: []
       }
+      starred_messages: {
+        Row: {
+          ai_message_id: string | null
+          created_at: string
+          id: string
+          message_id: string | null
+          user_id: string
+        }
+        Insert: {
+          ai_message_id?: string | null
+          created_at?: string
+          id?: string
+          message_id?: string | null
+          user_id: string
+        }
+        Update: {
+          ai_message_id?: string | null
+          created_at?: string
+          id?: string
+          message_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "starred_messages_ai_message_id_fkey"
+            columns: ["ai_message_id"]
+            isOneToOne: false
+            referencedRelation: "ai_chat_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "starred_messages_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
