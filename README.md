@@ -1,73 +1,88 @@
-# Welcome to your Lovable project
+# yoobro
 
-## Project info
+Anonymous chat web app built with Vite, React, TypeScript, Tailwind, and Supabase.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Local app
 
-## How can I edit this code?
-
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+1. Install dependencies:
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+npm install
+```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+2. Create `.env` from `.env.example` and fill in your values.
 
-# Step 3: Install the necessary dependencies.
-npm i
+3. Start the frontend:
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```sh
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## Calling feature
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Voice and video calls use:
+- WebRTC for peer-to-peer media
+- Socket.io for signaling
+- optional TURN credentials for privacy-safe relay
 
-**Use GitHub Codespaces**
+### Local signaling server
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Run the signaling server in a second terminal:
 
-## What technologies are used for this project?
+```sh
+npm run call:server
+```
 
-This project is built with:
+Default local signaling URL:
+
+```txt
+http://127.0.0.1:3001
+```
+
+Set this in `.env` for the frontend:
+
+```txt
+VITE_CALL_SIGNALING_URL="http://127.0.0.1:3001"
+```
+
+## Production deployment
+
+The frontend can stay on Vercel, but the calling system needs a separate long-running Node host. Vercel alone is not enough for Socket.io signaling.
+
+### Recommended setup
+
+- Frontend: Vercel
+- Signaling server: Render / Railway / Fly.io / VPS
+- TURN server: required for strong privacy and reliable NAT traversal
+
+### Render deployment
+
+This repo includes [render.yaml](C:\Users\Gautham\Desktop\code connect\code-connect\render.yaml) for the signaling server.
+
+Deploy the repo to Render, then set the frontend env:
+
+```txt
+VITE_CALL_SIGNALING_URL="https://your-render-service.onrender.com"
+```
+
+### TURN server env
+
+For privacy-safe anonymous calling, set:
+
+```txt
+VITE_TURN_URL="turn:your-turn-server:3478"
+VITE_TURN_USERNAME="your-turn-username"
+VITE_TURN_CREDENTIAL="your-turn-password"
+```
+
+Without TURN, calls may still work through public STUN, but they are less reliable and do not meet the strongest privacy requirement.
+
+## Current stack
 
 - Vite
-- TypeScript
 - React
-- shadcn-ui
+- TypeScript
 - Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- Supabase
+- Socket.io
+- WebRTC

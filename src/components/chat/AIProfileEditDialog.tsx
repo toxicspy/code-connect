@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -14,24 +14,40 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 
-interface CreateAIChatDialogProps {
+export interface AIProfileEditDialogProfile {
+  id: string;
+  name: string;
+  avatar_url: string | null;
+  system_prompt: string | null;
+}
+
+interface AIProfileEditDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreated: (profile: { id: string; name: string; avatar_url: string | null; system_prompt: string | null }) => void;
+  profile: AIProfileEditDialogProfile | null;
+  onUpdated: (profile: AIProfileEditDialogProfile) => void;
 }
 
 const DEFAULT_AI_NAME = "Maya";
 const DEFAULT_SYSTEM_PROMPT =
   "You are a friendly human-like girl chatting over text. Your default name is Maya unless a profile name is provided. Reply in short, natural sentences, sound warm and casual, understand shortcuts like wau and wru, and if asked where you live say London.";
 
-const CreateAIChatDialog = ({ open, onOpenChange, onCreated }: CreateAIChatDialogProps) => {
+const AIProfileEditDialog = ({ open, onOpenChange, profile, onUpdated }: AIProfileEditDialogProps) => {
   const { user } = useAuth();
-  const [name, setName] = useState(DEFAULT_AI_NAME);
-  const [systemPrompt, setSystemPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
+  const [name, setName] = useState("");
+  const [systemPrompt, setSystemPrompt] = useState("");
   const [saving, setSaving] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!profile) return;
+    setName(profile.name ?? "");
+    setSystemPrompt(profile.system_prompt ?? "");
+    setAvatarFile(null);
+    setAvatarPreview(profile.avatar_url ?? null);
+  }, [profile, open]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -44,17 +60,19 @@ const CreateAIChatDialog = ({ open, onOpenChange, onCreated }: CreateAIChatDialo
     setAvatarPreview(URL.createObjectURL(file));
   };
 
-  const handleCreate = async () => {
-    if (!user) return;
+  const handleUpdate = async () => {
+    if (!user || !profile) return;
     setSaving(true);
     try {
       const finalName = name.trim() || DEFAULT_AI_NAME;
-      let avatarUrl: string | null = null;
+      let avatarUrl: string | null = profile.avatar_url ?? null;
 
       if (avatarFile) {
         const ext = avatarFile.name.split(".").pop();
-        const path = `${user.id}/ai-${Date.now()}.${ext}`;
-        const { error: uploadErr } = await supabase.storage.from("avatars").upload(path, avatarFile);
+        const path = `${user.id}/ai-${profile.id}-${Date.now()}.${ext}`;
+        const { error: uploadErr } = await supabase.storage.from("avatars").upload(path, avatarFile, {
+          upsert: true,
+        });
         if (uploadErr) throw uploadErr;
         const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
         avatarUrl = urlData.publicUrl;
@@ -62,25 +80,22 @@ const CreateAIChatDialog = ({ open, onOpenChange, onCreated }: CreateAIChatDialo
 
       const { data, error } = await supabase
         .from("ai_chat_profiles")
-        .insert({
-          user_id: user.id,
+        .update({
           name: finalName,
           system_prompt: systemPrompt.trim() || DEFAULT_SYSTEM_PROMPT,
           avatar_url: avatarUrl,
         })
+        .eq("id", profile.id)
+        .eq("user_id", user.id)
         .select()
         .single();
 
       if (error) throw error;
-      toast.success(`${finalName} created!`);
-      onCreated(data);
+      toast.success("AI profile updated");
+      onUpdated(data as AIProfileEditDialogProfile);
       onOpenChange(false);
-      setName(DEFAULT_AI_NAME);
-      setSystemPrompt(DEFAULT_SYSTEM_PROMPT);
-      setAvatarFile(null);
-      setAvatarPreview(null);
     } catch (err: any) {
-      toast.error(err.message || "Failed to create AI chat");
+      toast.error(err.message || "Failed to update AI profile");
     } finally {
       setSaving(false);
     }
@@ -92,7 +107,7 @@ const CreateAIChatDialog = ({ open, onOpenChange, onCreated }: CreateAIChatDialo
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 font-display">
             <Bot className="h-5 w-5 text-primary" />
-            Create AI Chat
+            Edit AI Profile
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 pt-2">
@@ -115,17 +130,17 @@ const CreateAIChatDialog = ({ open, onOpenChange, onCreated }: CreateAIChatDialo
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="ai-name">AI Name</Label>
-            <Input id="ai-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={`e.g. ${DEFAULT_AI_NAME}, Study Buddy...`} />
+            <Label htmlFor="ai-edit-name">AI Name</Label>
+            <Input id="ai-edit-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={DEFAULT_AI_NAME} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ai-prompt">Personality / Instructions</Label>
-            <Textarea id="ai-prompt" value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} placeholder="Describe how the AI should behave..." rows={3} />
+            <Label htmlFor="ai-edit-prompt">Personality / Instructions</Label>
+            <Textarea id="ai-edit-prompt" value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows={3} />
             <p className="text-xs text-muted-foreground">This defines the AI's personality and behavior.</p>
           </div>
-          <Button onClick={handleCreate} disabled={saving} className="w-full">
+          <Button onClick={handleUpdate} disabled={saving} className="w-full">
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Bot className="h-4 w-4 mr-2" />}
-            Create AI Chat
+            Save Changes
           </Button>
         </div>
       </DialogContent>
@@ -133,4 +148,4 @@ const CreateAIChatDialog = ({ open, onOpenChange, onCreated }: CreateAIChatDialo
   );
 };
 
-export default CreateAIChatDialog;
+export default AIProfileEditDialog;

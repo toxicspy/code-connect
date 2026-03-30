@@ -104,15 +104,33 @@
 @layer base {
   * {
     @apply border-border;
+    transition:
+      background-color 0.3s ease,
+      border-color 0.3s ease,
+      color 0.3s ease,
+      box-shadow 0.3s ease;
   }
-  html, body {
+  html, body, #root {
     @apply bg-background text-foreground;
     font-family: 'DM Sans', sans-serif;
     height: 100%;
-    overflow: hidden;
+    min-height: 100%;
+  }
+  body {
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-text-size-adjust: 100%;
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Space Grotesk', sans-serif;
+  }
+}
+
+@media (min-width: 768px) {
+  @layer base {
+    body {
+      overflow: hidden;
+    }
   }
 }
 
@@ -124,6 +142,22 @@
   .chat-bubble-received {
     background-color: hsl(var(--chat-bubble-received));
     color: hsl(var(--chat-bubble-received-fg));
+  }
+  .chat-bubble-selected-sent {
+    box-shadow:
+      0 0 0 2px rgba(255, 255, 255, 0.98),
+      0 0 0 6px hsl(var(--primary) / 0.3),
+      0 14px 28px rgba(15, 23, 42, 0.22);
+    filter: brightness(0.9) saturate(1.08);
+    transform: translateY(-1px);
+  }
+  .chat-bubble-selected-received {
+    box-shadow:
+      0 0 0 2px hsl(var(--primary)),
+      0 0 0 6px hsl(var(--primary) / 0.14),
+      0 14px 28px rgba(15, 23, 42, 0.12);
+    background-color: hsl(var(--accent));
+    transform: translateY(-1px);
   }
   .chat-area-bg {
     background-color: hsl(var(--chat-bg));

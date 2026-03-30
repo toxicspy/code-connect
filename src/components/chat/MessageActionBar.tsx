@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Trash2, Share2, Forward, X, MoreVertical, Copy, Star, StarOff } from "lucide-react";
+import { Trash2, Share2, Forward, X, MoreVertical, Copy, Star, StarOff, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -13,32 +13,42 @@ import {
 import ForwardMessageDialog from "./ForwardMessageDialog";
 
 interface MessageActionBarProps {
-  selectedMessageId: string;
+  selectedMessageIds: string[];
   messageContent: string;
-  isMine: boolean;
+  selectedCount: number;
+  canCopy: boolean;
+  canStar: boolean;
+  canEdit: boolean;
   isStarred: boolean;
-  /** "normal" for human chats, "ai" for AI chats */
   chatType: "normal" | "ai";
   onDeselect: () => void;
   onDeleted: () => void;
+  onDeleteMessages: (messageIds: string[]) => Promise<{ error: unknown }>;
   onStarToggled: () => void;
+  onEditRequested?: () => void;
 }
 
 const MessageActionBar = ({
-  selectedMessageId,
+  selectedMessageIds,
   messageContent,
-  isMine,
+  selectedCount,
+  canCopy,
+  canStar,
+  canEdit,
   isStarred,
   chatType,
   onDeselect,
   onDeleted,
+  onDeleteMessages,
   onStarToggled,
+  onEditRequested,
 }: MessageActionBarProps) => {
   const { user } = useAuth();
   const [showForward, setShowForward] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const handleCopy = () => {
+    if (!canCopy) return;
     navigator.clipboard.writeText(messageContent);
     toast.success("Copied to clipboard");
     onDeselect();
@@ -47,25 +57,25 @@ const MessageActionBar = ({
   const handleDelete = async () => {
     if (!user || deleting) return;
     setDeleting(true);
-    const table = chatType === "ai" ? "ai_chat_messages" : "messages";
-    const { error } = await supabase.from(table).delete().eq("id", selectedMessageId);
+    const { error } = await onDeleteMessages(selectedMessageIds);
     if (error) {
       toast.error("Failed to delete message");
     } else {
-      toast.success("Message deleted");
+      toast.success(selectedCount === 1 ? "Message deleted" : `${selectedCount} messages deleted`);
       onDeleted();
     }
     setDeleting(false);
   };
 
   const handleStar = async () => {
-    if (!user) return;
+    if (!user || !canStar || selectedMessageIds.length !== 1) return;
+    const selectedMessageId = selectedMessageIds[0];
     if (isStarred) {
-      const col = chatType === "ai" ? "ai_message_id" : "message_id";
-      await supabase.from("starred_messages").delete().eq("user_id", user.id).eq(col, selectedMessageId);
+      const column = chatType === "ai" ? "ai_message_id" : "message_id";
+      await supabase.from("starred_messages").delete().eq("user_id", user.id).eq(column, selectedMessageId);
       toast.success("Unstarred");
     } else {
-      const insert: any = { user_id: user.id };
+      const insert: { user_id: string; ai_message_id?: string; message_id?: string } = { user_id: user.id };
       if (chatType === "ai") insert.ai_message_id = selectedMessageId;
       else insert.message_id = selectedMessageId;
       await supabase.from("starred_messages").insert(insert);
@@ -76,17 +86,16 @@ const MessageActionBar = ({
 
   return (
     <>
-      <div className="flex items-center gap-1 border-b bg-primary px-3 py-2 animate-in slide-in-from-top-2 duration-200">
+      <div className="animate-in slide-in-from-top-2 flex items-center gap-1 border-b bg-primary px-3 py-2 duration-200">
         <Button variant="ghost" size="icon" onClick={onDeselect} className="h-8 w-8 text-primary-foreground hover:bg-primary-foreground/20">
           <X className="h-4 w-4" />
         </Button>
+        <span className="text-sm font-medium text-primary-foreground">{selectedCount} selected</span>
         <div className="flex-1" />
 
-        {isMine && (
-          <Button variant="ghost" size="icon" onClick={handleDelete} disabled={deleting} className="h-8 w-8 text-primary-foreground hover:bg-primary-foreground/20" title="Delete">
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        )}
+        <Button variant="ghost" size="icon" onClick={handleDelete} disabled={deleting} className="h-8 w-8 text-primary-foreground hover:bg-primary-foreground/20" title="Delete">
+          <Trash2 className="h-4 w-4" />
+        </Button>
         <Button variant="ghost" size="icon" onClick={() => setShowForward(true)} className="h-8 w-8 text-primary-foreground hover:bg-primary-foreground/20" title="Forward">
           <Forward className="h-4 w-4" />
         </Button>
@@ -101,14 +110,23 @@ const MessageActionBar = ({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-40">
-            <DropdownMenuItem onClick={handleCopy}>
+            <DropdownMenuItem onClick={handleCopy} disabled={!canCopy}>
               <Copy className="mr-2 h-4 w-4" /> Copy
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleStar}>
+            {chatType === "normal" && (
+              <DropdownMenuItem onClick={onEditRequested} disabled={!canEdit}>
+                <Pencil className="mr-2 h-4 w-4" /> Edit
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={handleStar} disabled={!canStar}>
               {isStarred ? (
-                <><StarOff className="mr-2 h-4 w-4" /> Unstar</>
+                <>
+                  <StarOff className="mr-2 h-4 w-4" /> Unstar
+                </>
               ) : (
-                <><Star className="mr-2 h-4 w-4" /> Star</>
+                <>
+                  <Star className="mr-2 h-4 w-4" /> Star
+                </>
               )}
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -117,7 +135,10 @@ const MessageActionBar = ({
 
       <ForwardMessageDialog
         open={showForward}
-        onOpenChange={(open) => { setShowForward(open); if (!open) onDeselect(); }}
+        onOpenChange={(open) => {
+          setShowForward(open);
+          if (!open) onDeselect();
+        }}
         messageContent={messageContent}
       />
     </>

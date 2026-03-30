@@ -11,6 +11,8 @@ import ChatInput from "./ChatInput";
 import ReactMarkdown from "react-markdown";
 import TranslatedAudioButton from "./TranslatedAudioButton";
 import MessageActionBar from "./MessageActionBar";
+import TypingIndicator from "./TypingIndicator";
+import AIProfileEditDialog from "./AIProfileEditDialog";
 
 export interface AIProfile {
   id: string;
@@ -19,19 +21,25 @@ export interface AIProfile {
   system_prompt: string | null;
 }
 
+const DEFAULT_AI_NAME = "Maya";
+const DEFAULT_SYSTEM_PROMPT =
+  "You are a friendly human-like girl chatting over text. Reply in short, natural sentences, sound warm and casual, understand shortcuts like wau and wru, and if asked where you live say London.";
+
 interface AIChatViewProps {
   aiProfile: AIProfile | null;
   onBack?: () => void;
+  onProfileUpdated?: (profile: AIProfile) => void;
 }
 
-const AIChatView = ({ aiProfile, onBack }: AIChatViewProps) => {
+const AIChatView = ({ aiProfile, onBack, onProfileUpdated }: AIChatViewProps) => {
   const { user } = useAuth();
-  const { messages, loading, streaming, sendMessage } = useAIChatMessages(aiProfile?.id ?? null);
+  const { messages, loading, streaming, sendMessage, deleteMessages } = useAIChatMessages(aiProfile?.id ?? null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Selection state
-  const [selectedMsgId, setSelectedMsgId] = useState<string | null>(null);
+  const [selectedMsgIds, setSelectedMsgIds] = useState<Set<string>>(new Set());
   const [starredIds, setStarredIds] = useState<Set<string>>(new Set());
+  const [showProfileEdit, setShowProfileEdit] = useState(false);
 
   // Translation state
   const [translateEnabled, setTranslateEnabled] = useState(false);
@@ -44,7 +52,7 @@ const AIChatView = ({ aiProfile, onBack }: AIChatViewProps) => {
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages]);
+  }, [messages, streaming]);
 
   // Fetch starred AI messages
   useEffect(() => {
@@ -62,7 +70,7 @@ const AIChatView = ({ aiProfile, onBack }: AIChatViewProps) => {
     fetchStarred();
   }, [user, aiProfile?.id, messages]);
 
-  useEffect(() => { setSelectedMsgId(null); }, [aiProfile?.id]);
+  useEffect(() => { setSelectedMsgIds(new Set()); }, [aiProfile?.id]);
 
   useEffect(() => {
     setTranslations({});
@@ -115,13 +123,16 @@ const AIChatView = ({ aiProfile, onBack }: AIChatViewProps) => {
   const handleSend = async (text: string) => {
     if (streaming) return;
     try {
-      await sendMessage(text, aiProfile?.system_prompt || "You are a warm, friendly AI companion. Keep replies SHORT — 1 to 2 sentences max.");
+      const aiName = aiProfile?.name?.trim() || DEFAULT_AI_NAME;
+      const identityPrompt = `Your name is ${aiName}. If the user asks your name, answer ${aiName}. If no profile name is saved, your default name is ${DEFAULT_AI_NAME}.`;
+      await sendMessage(text, [identityPrompt, aiProfile?.system_prompt || DEFAULT_SYSTEM_PROMPT].filter(Boolean).join(" "));
     } catch (err: any) {
       toast.error(err.message || "Failed to get AI response");
     }
   };
 
-  const selectedMsg = messages.find((m) => m.id === selectedMsgId);
+  const selectedMessages = messages.filter((message) => selectedMsgIds.has(message.id));
+  const primarySelectedMessage = selectedMessages[0];
 
   if (!aiProfile) {
     return (
@@ -136,32 +147,33 @@ const AIChatView = ({ aiProfile, onBack }: AIChatViewProps) => {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      {/* Action bar when message selected */}
-      {selectedMsg ? (
+    <div className="flex h-full min-h-0 flex-col">
+      {selectedMessages.length > 0 ? (
         <MessageActionBar
-          selectedMessageId={selectedMsg.id}
-          messageContent={selectedMsg.content}
-          isMine={selectedMsg.role === "user"}
-          isStarred={starredIds.has(selectedMsg.id)}
+          selectedMessageIds={selectedMessages.map((message) => message.id)}
+          messageContent={primarySelectedMessage?.content ?? ""}
+          selectedCount={selectedMessages.length}
+          canCopy={selectedMessages.length === 1}
+          canStar={selectedMessages.length === 1}
+          isStarred={primarySelectedMessage ? starredIds.has(primarySelectedMessage.id) : false}
           chatType="ai"
-          onDeselect={() => setSelectedMsgId(null)}
+          onDeselect={() => setSelectedMsgIds(new Set())}
           onDeleted={() => {
-            setSelectedMsgId(null);
-            window.location.reload();
+            setSelectedMsgIds(new Set());
           }}
+          onDeleteMessages={deleteMessages}
           onStarToggled={() => {
+            if (!primarySelectedMessage) return;
             setStarredIds((prev) => {
               const next = new Set(prev);
-              if (next.has(selectedMsg.id)) next.delete(selectedMsg.id);
-              else next.add(selectedMsg.id);
+              if (next.has(primarySelectedMessage.id)) next.delete(primarySelectedMessage.id);
+              else next.add(primarySelectedMessage.id);
               return next;
             });
-            setSelectedMsgId(null);
+            setSelectedMsgIds(new Set());
           }}
         />
       ) : (
-        /* Header */
         <div className="flex items-center gap-3 border-b chat-header-bg px-4 py-3">
           {onBack && (
             <Button variant="ghost" size="icon" onClick={onBack} className="h-8 w-8 md:hidden">
@@ -169,11 +181,19 @@ const AIChatView = ({ aiProfile, onBack }: AIChatViewProps) => {
             </Button>
           )}
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 font-display text-sm font-semibold text-primary overflow-hidden">
-            {aiProfile.avatar_url ? (
-              <img src={aiProfile.avatar_url} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <Bot className="h-5 w-5" />
-            )}
+            <button
+              onClick={() => setShowProfileEdit(true)}
+              className="h-10 w-10 rounded-full overflow-hidden transition-opacity hover:opacity-80"
+              title="Edit AI profile"
+            >
+              {aiProfile.avatar_url ? (
+                <img src={aiProfile.avatar_url} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center">
+                  <Bot className="h-5 w-5" />
+                </div>
+              )}
+            </button>
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="text-sm font-semibold">{aiProfile.name}</h3>
@@ -183,31 +203,37 @@ const AIChatView = ({ aiProfile, onBack }: AIChatViewProps) => {
         </div>
       )}
 
-      {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto chat-area-bg px-4 py-4 space-y-2">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto chat-area-bg px-4 py-4 space-y-2">
         {loading ? (
           <div className="flex justify-center py-8 text-sm text-muted-foreground">Loading messages...</div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <Bot className="h-12 w-12 text-primary/30 mb-3" />
-            <p className="text-sm text-muted-foreground">Start chatting with {aiProfile.name}! 🤖</p>
+            <p className="text-sm text-muted-foreground">Start chatting with {aiProfile.name}.</p>
           </div>
         ) : (
           messages.map((msg) => {
             const isMine = msg.role === "user";
             const translated = translations[msg.id];
             const isTranslatingMsg = translating.has(msg.id);
-            const isSelected = selectedMsgId === msg.id;
+            const isSelected = selectedMsgIds.has(msg.id);
             return (
               <div
                 key={msg.id}
                 className={`flex animate-message-in ${isMine ? "justify-end" : "justify-start"}`}
-                onClick={() => setSelectedMsgId(isSelected ? null : msg.id)}
+                onClick={() => {
+                  setSelectedMsgIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(msg.id)) next.delete(msg.id);
+                    else next.add(msg.id);
+                    return next;
+                  });
+                }}
               >
                 <div
                   className={`max-w-[75%] rounded-2xl px-4 py-2.5 shadow-sm cursor-pointer transition-all ${
                     isMine ? "chat-bubble-sent rounded-br-md" : "chat-bubble-received rounded-bl-md"
-                  } ${isSelected ? "ring-2 ring-primary scale-[1.02]" : ""}`}
+                  } ${isSelected ? (isMine ? "chat-bubble-selected-sent scale-[1.02]" : "chat-bubble-selected-received scale-[1.02]") : ""}`}
                 >
                   {isMine ? (
                     <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
@@ -232,24 +258,26 @@ const AIChatView = ({ aiProfile, onBack }: AIChatViewProps) => {
                   )}
                   <p className={`mt-1 text-[10px] ${isMine ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
                     {format(new Date(msg.created_at), "HH:mm")}
-                    {starredIds.has(msg.id) && " ⭐"}
+                    {starredIds.has(msg.id) && " *"}
                   </p>
                 </div>
               </div>
             );
           })
         )}
-        {streaming && (
-          <div className="flex justify-start">
-            <div className="flex items-center gap-2 rounded-2xl chat-bubble-received rounded-bl-md px-4 py-2.5 shadow-sm">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">Thinking...</span>
-            </div>
-          </div>
-        )}
+        {streaming && <TypingIndicator label={`${aiProfile.name} is typing`} />}
       </div>
 
       <ChatInput onSend={handleSend} placeholder={`Message ${aiProfile.name}...`} disabled={streaming} />
+
+      <AIProfileEditDialog
+        open={showProfileEdit}
+        onOpenChange={setShowProfileEdit}
+        profile={aiProfile}
+        onUpdated={(profile) => {
+          onProfileUpdated?.(profile);
+        }}
+      />
     </div>
   );
 };

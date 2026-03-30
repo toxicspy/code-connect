@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import SettingsDialog from "@/components/SettingsDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MessageCircle, UserPlus, LogIn } from "lucide-react";
+import ThemeToggle from "@/components/ThemeToggle";
+import { UserPlus, LogIn, Settings } from "lucide-react";
 import { toast } from "sonner";
 
 const Auth = () => {
@@ -12,6 +14,7 @@ const Auth = () => {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,13 +39,27 @@ const Auth = () => {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="absolute right-4 top-4 flex items-center gap-2">
+        <ThemeToggle />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={() => setShowSettings(true)}
+          className="h-9 w-9 rounded-full border border-border/80 bg-card/80 backdrop-blur"
+          aria-label="Open settings"
+          title="Settings"
+        >
+          <Settings className="h-4 w-4" />
+        </Button>
+      </div>
       <div className="w-full max-w-md animate-fade-in">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary">
-            <MessageCircle className="h-8 w-8 text-primary-foreground" />
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-full ring-4 ring-primary/10">
+            <img src="/app-icon.png" alt="yoobro" className="h-full w-full object-cover" />
           </div>
-          <h1 className="font-display text-3xl font-bold tracking-tight">ChatFlow</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight">yoobro</h1>
           <p className="mt-2 text-muted-foreground">
             {isLogin ? "Welcome back" : "Create your account"}
           </p>
@@ -97,6 +114,7 @@ const Auth = () => {
           </p>
         </form>
       </div>
+      <SettingsDialog open={showSettings} onOpenChange={setShowSettings} />
     </div>
   );
 };

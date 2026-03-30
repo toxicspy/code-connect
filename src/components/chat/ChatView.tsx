@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useMessages } from "@/hooks/useMessages";
+import { useMessages, type ChatMessage } from "@/hooks/useMessages";
 import { ConversationWithDetails } from "@/hooks/useConversations";
 import { supabase } from "@/integrations/supabase/client";
-import { Send, ArrowLeft, Loader2 } from "lucide-react";
+import { useCall } from "@/contexts/CallContext";
+import type { RealtimeChannel } from "@supabase/supabase-js";
+import { Send, ArrowLeft, Loader2, Check, CheckCheck, Phone, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -11,22 +13,41 @@ import TranslationSettings from "./TranslationSettings";
 import ChatInput from "./ChatInput";
 import TranslatedAudioButton from "./TranslatedAudioButton";
 import MessageActionBar from "./MessageActionBar";
+import TypingIndicator from "./TypingIndicator";
 
 interface ChatViewProps {
   conversation: ConversationWithDetails | null;
   onBack?: () => void;
 }
 
+const GREETING_MESSAGE = "Hi 🙂";
+
+const MessageStatus = ({ message }: { message: ChatMessage }) => {
+  if (message.clientStatus === "sending") {
+    return <Check className="h-3 w-3" aria-label="Sent" />;
+  }
+
+  if (message.read_at) {
+    return <CheckCheck className="h-3 w-3 text-sky-300" aria-label="Seen" />;
+  }
+
+  return <CheckCheck className="h-3 w-3" aria-label="Delivered" />;
+};
+
 const ChatView = ({ conversation, onBack }: ChatViewProps) => {
   const { user } = useAuth();
-  const { messages, loading, sendMessage } = useMessages(conversation?.id ?? null);
+  const { startCall, activeCall, incomingCall } = useCall();
+  const { messages, loading, sendMessage, editMessage, deleteMessages } = useMessages(conversation?.id ?? null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const typingChannelRef = useRef<RealtimeChannel | null>(null);
+  const typingTimeoutRef = useRef<number | null>(null);
 
-  // Selection state
-  const [selectedMsgId, setSelectedMsgId] = useState<string | null>(null);
+  const [selectedMsgIds, setSelectedMsgIds] = useState<Set<string>>(new Set());
   const [starredIds, setStarredIds] = useState<Set<string>>(new Set());
+  const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
+  const [draftValue, setDraftValue] = useState("");
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 
-  // Translation state
   const [translateEnabled, setTranslateEnabled] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState("Kannada");
   const [translations, setTranslations] = useState<Record<string, string>>({});
@@ -37,9 +58,8 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages]);
+  }, [messages, isOtherUserTyping]);
 
-  // Fetch starred messages
   useEffect(() => {
     if (!user || !conversation?.id) return;
     const fetchStarred = async () => {
@@ -50,15 +70,47 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
         .select("message_id")
         .eq("user_id", user.id)
         .in("message_id", msgIds);
-      setStarredIds(new Set(data?.map((d: any) => d.message_id) || []));
+      setStarredIds(new Set(data?.map((d: { message_id: string | null }) => d.message_id ?? "").filter(Boolean) || []));
     };
     fetchStarred();
   }, [user, conversation?.id, messages]);
 
-  // Reset on conversation change
   useEffect(() => {
-    setSelectedMsgId(null);
+    setSelectedMsgIds(new Set());
+    setDraftValue("");
+    setEditingMessageId(null);
   }, [conversation?.id]);
+
+  useEffect(() => {
+    setIsOtherUserTyping(false);
+  }, [conversation?.id]);
+
+  useEffect(() => {
+    if (!conversation?.id || !user) return;
+
+    const channel = supabase
+      .channel(`typing-${conversation.id}`, {
+        config: {
+          broadcast: { self: false },
+        },
+      })
+      .on("broadcast", { event: "typing" }, ({ payload }) => {
+        if (payload.userId === user.id) return;
+        setIsOtherUserTyping(Boolean(payload.isTyping));
+      })
+      .subscribe();
+
+    typingChannelRef.current = channel;
+
+    return () => {
+      if (typingTimeoutRef.current) {
+        window.clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      typingChannelRef.current = null;
+      supabase.removeChannel(channel);
+    };
+  }, [conversation?.id, user]);
 
   useEffect(() => {
     setTranslations({});
@@ -76,19 +128,31 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
       const responseError = error?.message || data?.error;
       if (responseError) {
         const is429 = responseError.includes("429") || responseError.toLowerCase().includes("rate limit");
-        if (is429) { setIsRateLimited(true); toast.error("Too many translation requests."); return "rate_limited" as const; }
+        if (is429) {
+          setIsRateLimited(true);
+          toast.error("Too many translation requests.");
+          return "rate_limited" as const;
+        }
         setFailedTranslations((prev) => new Set(prev).add(msgId));
         return "failed" as const;
       }
       setTranslations((prev) => ({ ...prev, [msgId]: data.translated }));
       return "ok" as const;
-    } catch (e: any) {
-      const msg = String(e?.message || "");
-      if (msg.includes("429") || msg.toLowerCase().includes("rate limit")) { setIsRateLimited(true); toast.error("Too many translation requests."); return "rate_limited" as const; }
+    } catch (e: unknown) {
+      const msg = String((e as { message?: string })?.message || "");
+      if (msg.includes("429") || msg.toLowerCase().includes("rate limit")) {
+        setIsRateLimited(true);
+        toast.error("Too many translation requests.");
+        return "rate_limited" as const;
+      }
       setFailedTranslations((prev) => new Set(prev).add(msgId));
       return "failed" as const;
     } finally {
-      setTranslating((prev) => { const next = new Set(prev); next.delete(msgId); return next; });
+      setTranslating((prev) => {
+        const next = new Set(prev);
+        next.delete(msgId);
+        return next;
+      });
     }
   }, [targetLanguage, translations, translating, failedTranslations]);
 
@@ -104,16 +168,77 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
         if (cancelled) break;
         const result = await translateText(msg.id, msg.content);
         if (result === "rate_limited") break;
-        if (!cancelled) await new Promise((r) => setTimeout(r, 2000));
+        if (!cancelled) await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     };
-    processQueue().catch(console.error).finally(() => { processingRef.current = false; });
-    return () => { cancelled = true; };
+    processQueue().catch(console.error).finally(() => {
+      processingRef.current = false;
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [translateEnabled, targetLanguage, messages, translations, translating, failedTranslations, isRateLimited, translateText]);
 
-  const handleSend = async (text: string) => { await sendMessage(text); };
+  const handleSend = async (text: string) => {
+    if (typingTimeoutRef.current) {
+      window.clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
 
-  const selectedMsg = messages.find((m) => m.id === selectedMsgId);
+    typingChannelRef.current?.send({
+      type: "broadcast",
+      event: "typing",
+      payload: { userId: user?.id, isTyping: false },
+    });
+
+    if (editingMessageId) {
+      const { error } = await editMessage(editingMessageId, text);
+      if (error) {
+        toast.error("Failed to edit message");
+        return;
+      }
+      toast.success("Message updated");
+      setEditingMessageId(null);
+      setDraftValue("");
+      return;
+    }
+
+    await sendMessage(text);
+    setDraftValue("");
+  };
+
+  const handleDraftChange = useCallback((text: string) => {
+    if (!user || !typingChannelRef.current) return;
+
+    const isTyping = text.trim().length > 0;
+    typingChannelRef.current.send({
+      type: "broadcast",
+      event: "typing",
+      payload: { userId: user.id, isTyping },
+    });
+
+    if (typingTimeoutRef.current) {
+      window.clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+
+    if (isTyping) {
+      typingTimeoutRef.current = window.setTimeout(() => {
+        typingChannelRef.current?.send({
+          type: "broadcast",
+          event: "typing",
+          payload: { userId: user.id, isTyping: false },
+        });
+        typingTimeoutRef.current = null;
+      }, 1500);
+    }
+  }, [user]);
+
+  const selectedMessages = messages.filter((message) => selectedMsgIds.has(message.id));
+  const selectedMessageIds = Array.from(selectedMsgIds);
+  const primarySelectedMessage = selectedMessages[0];
+  const canEditSelectedMessage = selectedMessages.length === 1 && primarySelectedMessage?.sender_id === user?.id;
+  const callDisabled = Boolean(activeCall || incomingCall);
 
   if (!conversation) {
     return (
@@ -128,33 +253,40 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      {/* Action bar when message selected */}
-      {selectedMsg ? (
+    <div className="flex h-full min-h-0 flex-col">
+      {selectedMessages.length > 0 ? (
         <MessageActionBar
-          selectedMessageId={selectedMsg.id}
-          messageContent={selectedMsg.content}
-          isMine={selectedMsg.sender_id === user?.id}
-          isStarred={starredIds.has(selectedMsg.id)}
+          selectedMessageIds={selectedMessageIds}
+          messageContent={primarySelectedMessage?.content ?? ""}
+          selectedCount={selectedMessages.length}
+          canCopy={selectedMessages.length === 1}
+          canStar={selectedMessages.length === 1}
+          canEdit={canEditSelectedMessage}
+          isStarred={primarySelectedMessage ? starredIds.has(primarySelectedMessage.id) : false}
           chatType="normal"
-          onDeselect={() => setSelectedMsgId(null)}
+          onDeselect={() => setSelectedMsgIds(new Set())}
           onDeleted={() => {
-            setSelectedMsgId(null);
-            // Message will disappear via realtime or we force refetch
-            window.location.reload();
+            setSelectedMsgIds(new Set());
           }}
+          onDeleteMessages={deleteMessages}
           onStarToggled={() => {
+            if (!primarySelectedMessage) return;
             setStarredIds((prev) => {
               const next = new Set(prev);
-              if (next.has(selectedMsg.id)) next.delete(selectedMsg.id);
-              else next.add(selectedMsg.id);
+              if (next.has(primarySelectedMessage.id)) next.delete(primarySelectedMessage.id);
+              else next.add(primarySelectedMessage.id);
               return next;
             });
-            setSelectedMsgId(null);
+            setSelectedMsgIds(new Set());
+          }}
+          onEditRequested={() => {
+            if (!primarySelectedMessage || primarySelectedMessage.sender_id !== user?.id) return;
+            setEditingMessageId(primarySelectedMessage.id);
+            setDraftValue(primarySelectedMessage.content);
+            setSelectedMsgIds(new Set());
           }}
         />
       ) : (
-        /* Normal Header */
         <div className="flex items-center gap-3 border-b chat-header-bg px-4 py-3">
           {onBack && (
             <Button variant="ghost" size="icon" onClick={onBack} className="h-8 w-8 md:hidden">
@@ -172,32 +304,74 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
             <h3 className="text-sm font-semibold">{conversation.otherUser.display_name}</h3>
             <p className="text-xs font-mono user-code-badge inline-block rounded px-1.5 py-0.5">#{conversation.otherUser.user_code}</p>
           </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            title="Start voice call"
+            disabled={callDisabled}
+            onClick={() => startCall({
+              targetUserId: conversation.otherUser.user_id,
+              targetName: conversation.otherUser.display_name,
+              callType: "voice",
+            })}
+          >
+            <Phone className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            title="Start video call"
+            disabled={callDisabled}
+            onClick={() => startCall({
+              targetUserId: conversation.otherUser.user_id,
+              targetName: conversation.otherUser.display_name,
+              callType: "video",
+            })}
+          >
+            <Video className="h-4 w-4" />
+          </Button>
           <TranslationSettings enabled={translateEnabled} targetLanguage={targetLanguage} onToggle={setTranslateEnabled} onLanguageChange={setTargetLanguage} />
         </div>
       )}
 
-      {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto chat-area-bg px-4 py-4 space-y-2">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto chat-area-bg px-4 py-4 space-y-2">
         {loading ? (
           <div className="flex justify-center py-8 text-sm text-muted-foreground">Loading messages...</div>
         ) : messages.length === 0 ? (
-          <div className="flex justify-center py-8 text-sm text-muted-foreground">No messages yet. Say hello! 👋</div>
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <p className="text-sm text-muted-foreground">No messages yet. Start with a friendly hello.</p>
+            <Button type="button" className="mt-4 rounded-full px-5" onClick={() => void handleSend(GREETING_MESSAGE)}>
+              Say Hi
+            </Button>
+          </div>
         ) : (
           messages.map((msg) => {
             const isMine = msg.sender_id === user?.id;
             const translated = translations[msg.id];
             const isTranslating = translating.has(msg.id);
-            const isSelected = selectedMsgId === msg.id;
+            const isSelected = selectedMsgIds.has(msg.id);
+
             return (
               <div
                 key={msg.id}
                 className={`flex animate-message-in ${isMine ? "justify-end" : "justify-start"}`}
-                onClick={() => setSelectedMsgId(isSelected ? null : msg.id)}
+                onClick={() => {
+                  setSelectedMsgIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(msg.id)) next.delete(msg.id);
+                    else next.add(msg.id);
+                    return next;
+                  });
+                }}
               >
                 <div
-                  className={`max-w-[75%] rounded-2xl px-4 py-2.5 shadow-sm cursor-pointer transition-all ${
+                  className={`max-w-[75%] cursor-pointer rounded-2xl px-4 py-2.5 shadow-sm transition-all ${
                     isMine ? "chat-bubble-sent rounded-br-md" : "chat-bubble-received rounded-bl-md"
-                  } ${isSelected ? "ring-2 ring-primary scale-[1.02]" : ""}`}
+                  } ${isSelected ? (isMine ? "chat-bubble-selected-sent scale-[1.02]" : "chat-bubble-selected-received scale-[1.02]") : ""}`}
                 >
                   <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
                   {translateEnabled && (
@@ -214,18 +388,31 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
                       ) : null}
                     </div>
                   )}
-                  <p className={`mt-1 text-[10px] ${isMine ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
-                    {format(new Date(msg.created_at), "HH:mm")}
-                    {starredIds.has(msg.id) && " ⭐"}
-                  </p>
+                  <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${isMine ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                    <span>{format(new Date(msg.created_at), "HH:mm")}</span>
+                    {starredIds.has(msg.id) && <span>*</span>}
+                    {isMine && <MessageStatus message={msg} />}
+                  </div>
                 </div>
               </div>
             );
           })
         )}
+        {isOtherUserTyping && <TypingIndicator label={`${conversation.otherUser.display_name} is typing`} />}
       </div>
 
-      <ChatInput onSend={handleSend} />
+      <ChatInput
+        onSend={handleSend}
+        onDraftChange={handleDraftChange}
+        value={draftValue}
+        onValueChange={setDraftValue}
+        isEditing={Boolean(editingMessageId)}
+        onCancelEdit={() => {
+          setEditingMessageId(null);
+          setDraftValue("");
+        }}
+        placeholder={editingMessageId ? "Edit your message..." : "Type a message..."}
+      />
     </div>
   );
 };

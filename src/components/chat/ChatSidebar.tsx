@@ -20,11 +20,12 @@ type Profile = Tables<"profiles">;
 interface ChatSidebarProps {
   selectedConversation: string | null;
   selectedAIProfileId?: string | null;
+  aiProfilesVersion?: number;
   onSelectConversation: (conv: ConversationWithDetails) => void;
   onSelectAIChat?: (profile: AIProfile) => void;
 }
 
-const ChatSidebar = ({ selectedConversation, selectedAIProfileId, onSelectConversation, onSelectAIChat }: ChatSidebarProps) => {
+const ChatSidebar = ({ selectedConversation, selectedAIProfileId, aiProfilesVersion = 0, onSelectConversation, onSelectAIChat }: ChatSidebarProps) => {
   const { user, profile, signOut } = useAuth();
   const { conversations, loading, refetch } = useConversations();
   const [search, setSearch] = useState("");
@@ -50,7 +51,7 @@ const ChatSidebar = ({ selectedConversation, selectedAIProfileId, onSelectConver
       setAiProfiles((data as AIProfile[]) || []);
     };
     fetchAI();
-  }, [user]);
+  }, [user, aiProfilesVersion]);
 
   // Debounced global user search
   useEffect(() => {
@@ -119,7 +120,8 @@ const ChatSidebar = ({ selectedConversation, selectedAIProfileId, onSelectConver
       return 0;
     });
 
-  const copyCode = () => {
+  const copyCode = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
     if (profile?.user_code) {
       navigator.clipboard.writeText(profile.user_code);
       toast.success("Code copied!");
@@ -129,17 +131,21 @@ const ChatSidebar = ({ selectedConversation, selectedAIProfileId, onSelectConver
   const showGlobalResults = search.trim().length > 0 && tab === "chats";
 
   return (
-    <div className="flex h-full flex-col border-r bg-card">
+    <div className="flex h-full min-h-0 flex-col border-r bg-card">
       {/* Header */}
       <div className="flex items-center justify-between border-b px-4 py-3">
-        <button onClick={() => setShowProfile(true)} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary overflow-hidden">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowProfile(true)}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary overflow-hidden transition-opacity hover:opacity-80"
+            title="Edit profile"
+          >
             {profile?.avatar_url ? (
               <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
             ) : (
               <MessageCircle className="h-4 w-4 text-primary-foreground" />
             )}
-          </div>
+          </button>
           <div className="text-left">
             <h2 className="font-display text-sm font-semibold">{profile?.display_name}</h2>
             <button onClick={copyCode} className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-mono user-code-badge transition-colors hover:opacity-80">
@@ -147,7 +153,7 @@ const ChatSidebar = ({ selectedConversation, selectedAIProfileId, onSelectConver
               <Copy className="h-3 w-3" />
             </button>
           </div>
-        </button>
+        </div>
         <div className="flex gap-1">
           {tab === "chats" && (
             <Button variant="ghost" size="icon" onClick={() => setShowArchived(!showArchived)} className={`h-8 w-8 ${showArchived ? "text-primary" : ""}`} title={showArchived ? "Show chats" : "Show archived"}>
@@ -199,7 +205,7 @@ const ChatSidebar = ({ selectedConversation, selectedAIProfileId, onSelectConver
       )}
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         {tab === "ai" ? (
           /* AI Chats list */
           aiProfiles.length === 0 ? (
@@ -214,7 +220,7 @@ const ChatSidebar = ({ selectedConversation, selectedAIProfileId, onSelectConver
                 key={ai.id}
                 className={`group relative flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 ${selectedAIProfileId === ai.id ? "bg-accent" : ""}`}
               >
-                <button onClick={() => onSelectAIChat?.(ai)} className="flex flex-1 items-center gap-3 min-w-0">
+                <button onClick={() => onSelectAIChat?.(ai)} className="flex min-w-0 flex-1 items-center gap-3 pr-2 text-left">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary overflow-hidden">
                     {ai.avatar_url ? (
                       <img src={ai.avatar_url} alt="" className="h-full w-full object-cover" />
@@ -232,7 +238,10 @@ const ChatSidebar = ({ selectedConversation, selectedAIProfileId, onSelectConver
                   aiName={ai.name}
                   onDelete={() => removeAIProfile(ai.id)}
                 >
-                  <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-muted">
+                  <button
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    aria-label={`Open actions for ${ai.name}`}
+                  >
                     <MoreVertical className="h-4 w-4 text-muted-foreground" />
                   </button>
                 </AIChatContextMenu>
@@ -284,7 +293,7 @@ const ChatSidebar = ({ selectedConversation, selectedAIProfileId, onSelectConver
             ) : (
               filtered.map((conv) => (
                 <div key={conv.id} className={`group relative flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 ${selectedConversation === conv.id ? "bg-accent" : ""}`}>
-                  <button onClick={() => onSelectConversation(conv)} className="flex flex-1 items-center gap-3 min-w-0">
+                  <button onClick={() => onSelectConversation(conv)} className="flex min-w-0 flex-1 items-center gap-3 pr-2 text-left">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 font-display text-sm font-semibold text-primary overflow-hidden">
                       {conv.otherUser.avatar_url ? <img src={conv.otherUser.avatar_url} alt="" className="h-full w-full object-cover" /> : conv.otherUser.display_name.charAt(0).toUpperCase()}
                     </div>
@@ -294,9 +303,22 @@ const ChatSidebar = ({ selectedConversation, selectedAIProfileId, onSelectConver
                           {conv.is_pinned && <Pin className="h-3 w-3 text-muted-foreground inline-block" />}
                           {conv.otherUser.display_name}
                         </span>
-                        {conv.lastMessage && <span className="text-[10px] text-muted-foreground">{formatDistanceToNow(new Date(conv.lastMessage.created_at), { addSuffix: false })}</span>}
+                        {conv.lastMessage && (
+                          <span className="shrink-0 pl-2 text-[10px] text-muted-foreground">
+                            {formatDistanceToNow(new Date(conv.lastMessage.created_at), { addSuffix: false })}
+                          </span>
+                        )}
                       </div>
-                      <p className="truncate text-xs text-muted-foreground">{conv.lastMessage?.content || "No messages yet"}</p>
+                      <div className="mt-0.5 flex items-center gap-2">
+                        <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                          {conv.lastMessage?.content || "No messages yet"}
+                        </p>
+                        {conv.unreadCount > 0 && (
+                          <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold leading-none text-primary-foreground">
+                            {conv.unreadCount}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </button>
                   <ConversationContextMenu
@@ -308,7 +330,10 @@ const ChatSidebar = ({ selectedConversation, selectedAIProfileId, onSelectConver
                     onUpdate={refetch}
                     onDelete={selectedConversation === conv.id ? () => onSelectConversation(null as any) : undefined}
                   >
-                    <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-muted">
+                    <button
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      aria-label={`Open actions for ${conv.otherUser.display_name}`}
+                    >
                       <MoreVertical className="h-4 w-4 text-muted-foreground" />
                     </button>
                   </ConversationContextMenu>

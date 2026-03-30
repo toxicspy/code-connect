@@ -12,6 +12,7 @@ export interface ConversationWithDetails {
   updated_at: string;
   is_pinned: boolean;
   is_archived: boolean;
+  unreadCount: number;
 }
 
 export const useConversations = () => {
@@ -62,7 +63,19 @@ export const useConversations = () => {
       .select("*")
       .in("user_id", otherUserIds);
 
+    const { data: unreadMessages } = await supabase
+      .from("messages")
+      .select("conversation_id")
+      .in("conversation_id", convIds)
+      .neq("sender_id", user.id)
+      .is("read_at", null);
+
     const profileMap = new Map(profiles?.map((p) => [p.user_id, p]));
+    const unreadCountMap = new Map<string, number>();
+
+    unreadMessages?.forEach((message) => {
+      unreadCountMap.set(message.conversation_id, (unreadCountMap.get(message.conversation_id) ?? 0) + 1);
+    });
 
     const results: ConversationWithDetails[] = [];
     const seenConvIds = new Set<string>();
@@ -89,6 +102,7 @@ export const useConversations = () => {
         updated_at: msgs?.[0]?.created_at || new Date().toISOString(),
         is_pinned: myStatus?.is_pinned ?? false,
         is_archived: myStatus?.is_archived ?? false,
+        unreadCount: unreadCountMap.get(part.conversation_id) ?? 0,
       });
     }
 
@@ -106,7 +120,7 @@ export const useConversations = () => {
 
     const channel = supabase
       .channel("conversations-updates")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => {
         fetchConversations();
       })
       .subscribe();

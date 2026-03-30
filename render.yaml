@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: yoobro-call-signaling
+    runtime: node
+    rootDir: .
+    plan: free
+    buildCommand: npm install
+    startCommand: npm run call:server
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 3001

@@ -32,6 +32,44 @@ export const useAIChatMessages = (aiProfileId: string | null) => {
     fetchMessages();
   }, [fetchMessages]);
 
+  useEffect(() => {
+    if (!aiProfileId || !user) return;
+
+    const channel = supabase
+      .channel(`ai-messages-${aiProfileId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "ai_chat_messages", filter: `ai_profile_id=eq.${aiProfileId}` },
+        (payload) => {
+          const insertedMessage = payload.new as AIChatMessage;
+          setMessages((prev) => {
+            if (prev.some((message) => message.id === insertedMessage.id)) return prev;
+            return [...prev, insertedMessage];
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "ai_chat_messages", filter: `ai_profile_id=eq.${aiProfileId}` },
+        (payload) => {
+          const updatedMessage = payload.new as AIChatMessage;
+          setMessages((prev) => prev.map((message) => (
+            message.id === updatedMessage.id ? updatedMessage : message
+          )));
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "ai_chat_messages", filter: `ai_profile_id=eq.${aiProfileId}` },
+        (payload) => {
+          setMessages((prev) => prev.filter((message) => message.id !== payload.old.id));
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [aiProfileId, user]);
+
   const sendMessage = async (content: string, systemPrompt: string) => {
     if (!user || !aiProfileId || !content.trim()) return;
 
@@ -140,5 +178,20 @@ export const useAIChatMessages = (aiProfileId: string | null) => {
     }
   };
 
-  return { messages, loading, streaming, sendMessage };
+  const deleteMessages = async (messageIds: string[]) => {
+    if (messageIds.length === 0) return { error: null };
+
+    const previousMessages = messages;
+    setMessages((prev) => prev.filter((message) => !messageIds.includes(message.id)));
+
+    const { error } = await supabase.from("ai_chat_messages").delete().in("id", messageIds);
+
+    if (error) {
+      setMessages(previousMessages);
+    }
+
+    return { error };
+  };
+
+  return { messages, loading, streaming, sendMessage, deleteMessages };
 };

@@ -4,10 +4,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Message = Tables<"messages">;
+export type ChatMessage = Message & { clientStatus?: "sending" };
 
 export const useMessages = (conversationId: string | null) => {
   const { user } = useAuth();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
 
   const fetchMessages = useCallback(async () => {
@@ -22,9 +23,32 @@ export const useMessages = (conversationId: string | null) => {
     setLoading(false);
   }, [conversationId]);
 
+  const markConversationAsRead = useCallback(async () => {
+    if (!conversationId || !user) return;
+
+    const unreadIncomingIds = messages
+      .filter((message) => message.sender_id !== user.id && !message.read_at)
+      .map((message) => message.id);
+
+    if (unreadIncomingIds.length === 0) return;
+
+    const { error } = await supabase
+      .from("messages")
+      .update({ read_at: new Date().toISOString() })
+      .in("id", unreadIncomingIds);
+
+    if (error) {
+      console.error("Failed to mark messages as read:", error);
+    }
+  }, [conversationId, messages, user]);
+
   useEffect(() => {
     fetchMessages();
   }, [fetchMessages]);
+
+  useEffect(() => {
+    markConversationAsRead();
+  }, [markConversationAsRead]);
 
   useEffect(() => {
     if (!conversationId) return;
@@ -35,7 +59,28 @@ export const useMessages = (conversationId: string | null) => {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` },
         (payload) => {
-          setMessages((prev) => [...prev, payload.new as Message]);
+          const insertedMessage = payload.new as ChatMessage;
+          setMessages((prev) => {
+            if (prev.some((message) => message.id === insertedMessage.id)) return prev;
+            return [...prev, insertedMessage];
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` },
+        (payload) => {
+          const updatedMessage = payload.new as ChatMessage;
+          setMessages((prev) => prev.map((message) => (
+            message.id === updatedMessage.id ? updatedMessage : message
+          )));
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` },
+        (payload) => {
+          setMessages((prev) => prev.filter((message) => message.id !== payload.old.id));
         }
       )
       .subscribe();
@@ -46,12 +91,81 @@ export const useMessages = (conversationId: string | null) => {
   const sendMessage = async (content: string) => {
     if (!user || !conversationId || !content.trim()) return;
 
-    await supabase.from("messages").insert({
+    const trimmedContent = content.trim();
+    const tempId = `temp-${crypto.randomUUID()}`;
+    const tempMessage: ChatMessage = {
+      id: tempId,
       conversation_id: conversationId,
       sender_id: user.id,
-      content: content.trim(),
-    });
+      content: trimmedContent,
+      created_at: new Date().toISOString(),
+      read_at: null,
+      clientStatus: "sending",
+    };
+
+    setMessages((prev) => [...prev, tempMessage]);
+
+    const { data, error } = await supabase
+      .from("messages")
+      .insert({
+        conversation_id: conversationId,
+        sender_id: user.id,
+        content: trimmedContent,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      setMessages((prev) => prev.filter((message) => message.id !== tempId));
+      return;
+    }
+
+    if (data) {
+      setMessages((prev) => prev.map((message) => (
+        message.id === tempId ? (data as ChatMessage) : message
+      )));
+    }
   };
 
-  return { messages, loading, sendMessage };
+  const deleteMessages = async (messageIds: string[]) => {
+    if (messageIds.length === 0) return { error: null };
+
+    const previousMessages = messages;
+    setMessages((prev) => prev.filter((message) => !messageIds.includes(message.id)));
+
+    const { error } = await supabase.from("messages").delete().in("id", messageIds);
+
+    if (error) {
+      setMessages(previousMessages);
+    }
+
+    return { error };
+  };
+
+  const editMessage = async (messageId: string, content: string) => {
+    if (!user || !conversationId || !content.trim()) return { error: null };
+
+    const trimmedContent = content.trim();
+    const previousMessages = messages;
+    setMessages((prev) =>
+      prev.map((message) => (
+        message.id === messageId ? { ...message, content: trimmedContent } : message
+      ))
+    );
+
+    const { error } = await supabase
+      .from("messages")
+      .update({ content: trimmedContent })
+      .eq("id", messageId)
+      .eq("sender_id", user.id)
+      .eq("conversation_id", conversationId);
+
+    if (error) {
+      setMessages(previousMessages);
+    }
+
+    return { error };
+  };
+
+  return { messages, loading, sendMessage, editMessage, deleteMessages };
 };
