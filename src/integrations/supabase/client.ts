@@ -4,13 +4,51 @@ import type { Database } from './types';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+export const SUPABASE_STORAGE_KEY = "yoobro-auth";
+
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+  throw new Error(
+    "Missing Supabase configuration. Please set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in your .env file."
+  );
+}
+
+const storage = {
+  getItem: (key: string) => {
+    if (typeof window === "undefined") return null;
+
+    try {
+      return window.localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (key: string, value: string) => {
+    if (typeof window === "undefined") return;
+
+    try {
+      window.localStorage.setItem(key, value);
+    } catch {
+      // Ignore storage failures so auth can keep running in constrained environments.
+    }
+  },
+  removeItem: (key: string) => {
+    if (typeof window === "undefined") return;
+
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      // Ignore storage failures so auth can keep running in constrained environments.
+    }
+  },
+};
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
+    storage,
+    storageKey: SUPABASE_STORAGE_KEY,
     persistSession: true,
     autoRefreshToken: true,
   }

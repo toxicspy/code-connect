@@ -10,21 +10,22 @@ serve(async (req) => {
 
   try {
     const { text, targetLanguage } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured");
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-lite",
+        model: "gpt-4.1-nano",
+        temperature: 0.2,
         messages: [
           {
             role: "system",
-            content: `You are a translator. Translate the given text to ${targetLanguage}. Return ONLY the translated text in the target language script followed by the transliteration in parentheses. For example if translating "hello" to Kannada: "ನಮಸ್ಕಾರ (namaskāra)". Do not add any explanations.`,
+            content: `You are a translator. Translate the given text to ${targetLanguage}. Return ONLY the translated text in the target language script followed by the transliteration in parentheses. Do not add explanations or extra text.`,
           },
           { role: "user", content: text },
         ],
@@ -32,19 +33,15 @@ serve(async (req) => {
     });
 
     if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded, try again later." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      if (response.status === 429 || response.status === 402) {
+        return new Response(JSON.stringify({ error: "Translation temporarily unavailable." }), {
+          status: 503,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
-      throw new Error("Translation failed");
+      console.error("OpenAI error:", response.status, t);
+      throw new Error("Translation temporarily unavailable.");
     }
 
     const data = await response.json();
@@ -56,7 +53,8 @@ serve(async (req) => {
   } catch (e) {
     console.error("translate error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

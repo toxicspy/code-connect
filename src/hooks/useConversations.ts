@@ -4,11 +4,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Profile = Tables<"profiles">;
+type Message = Tables<"messages">;
 
 export interface ConversationWithDetails {
   id: string;
   otherUser: Profile;
-  lastMessage?: { content: string; created_at: string; sender_id: string };
+  lastMessage?: Pick<Message, "content" | "created_at" | "sender_id" | "message_type" | "is_opened" | "media_type" | "media_url" | "file_name" | "is_encrypted">;
   updated_at: string;
   is_pinned: boolean;
   is_archived: boolean;
@@ -89,7 +90,7 @@ export const useConversations = () => {
 
       const { data: msgs } = await supabase
         .from("messages")
-        .select("content, created_at, sender_id")
+        .select("content, created_at, sender_id, message_type, is_opened, media_type, media_url, file_name, is_encrypted")
         .eq("conversation_id", part.conversation_id)
         .order("created_at", { ascending: false })
         .limit(1);

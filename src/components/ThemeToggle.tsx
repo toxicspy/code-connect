@@ -1,3 +1,4 @@
+import { Moon, SunMedium } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/contexts/ThemeContext";
 
@@ -11,11 +12,11 @@ const ThemeToggle = () => {
       variant="ghost"
       size="icon"
       onClick={toggleTheme}
-      className="h-9 w-9 rounded-full border border-border/80 bg-card/80 text-base backdrop-blur"
+      className="h-10 w-10 rounded-sm bg-background/85 text-foreground hover:bg-background dark:bg-background/80"
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
       title={isDark ? "Switch to light mode" : "Switch to dark mode"}
     >
-      <span aria-hidden="true">{isDark ? "☀️" : "🌙"}</span>
+      {isDark ? <SunMedium className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
     </Button>
   );
 };

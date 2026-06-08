@@ -1,4 +1,12 @@
-project_id = "gtftsyawiekaezrcgqgw"
+project_id = "npwrjtkljiaqdidaulrz"
+
+[auth]
+site_url = "https://code-connect-opal-psi.vercel.app"
+additional_redirect_urls = ["https://code-connect-opal-psi.vercel.app"]
+
+[auth.email]
+enable_confirmations = false
+max_frequency = "1s"
 
 [functions.translate]
 verify_jwt = false

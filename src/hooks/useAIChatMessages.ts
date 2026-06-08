@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import type { Tables } from "@/integrations/supabase/types";
+import { generateUUID } from "@/lib/utils";
 
 export interface AIChatMessage {
   id: string;
@@ -9,9 +11,12 @@ export interface AIChatMessage {
   created_at: string;
 }
 
+export type AIChatReaction = Tables<"ai_message_reactions">;
+
 export const useAIChatMessages = (aiProfileId: string | null) => {
   const { user } = useAuth();
   const [messages, setMessages] = useState<AIChatMessage[]>([]);
+  const [reactionsByMessage, setReactionsByMessage] = useState<Record<string, AIChatReaction[]>>({});
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState(false);
 
@@ -24,7 +29,31 @@ export const useAIChatMessages = (aiProfileId: string | null) => {
       .eq("ai_profile_id", aiProfileId)
       .eq("user_id", user.id)
       .order("created_at", { ascending: true });
-    setMessages((data as AIChatMessage[]) || []);
+    const nextMessages = (data as AIChatMessage[]) || [];
+    setMessages(nextMessages);
+
+    const messageIds = nextMessages.map((message) => message.id);
+    if (messageIds.length === 0) {
+      setReactionsByMessage({});
+      setLoading(false);
+      return;
+    }
+
+    const { data: reactions } = await supabase
+      .from("ai_message_reactions")
+      .select("*")
+      .in("ai_message_id", messageIds)
+      .order("created_at", { ascending: true });
+
+    const groupedReactions = ((reactions as AIChatReaction[]) || []).reduce<Record<string, AIChatReaction[]>>((accumulator, reaction) => {
+      if (!accumulator[reaction.ai_message_id]) {
+        accumulator[reaction.ai_message_id] = [];
+      }
+      accumulator[reaction.ai_message_id].push(reaction);
+      return accumulator;
+    }, {});
+
+    setReactionsByMessage(groupedReactions);
     setLoading(false);
   }, [aiProfileId, user]);
 
@@ -63,6 +92,48 @@ export const useAIChatMessages = (aiProfileId: string | null) => {
         { event: "DELETE", schema: "public", table: "ai_chat_messages", filter: `ai_profile_id=eq.${aiProfileId}` },
         (payload) => {
           setMessages((prev) => prev.filter((message) => message.id !== payload.old.id));
+          setReactionsByMessage((prev) => {
+            const next = { ...prev };
+            delete next[payload.old.id as string];
+            return next;
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "ai_message_reactions" },
+        (payload) => {
+          const reaction = payload.new as AIChatReaction;
+          setReactionsByMessage((prev) => {
+            const existing = prev[reaction.ai_message_id] ?? [];
+            if (existing.some((item) => item.id === reaction.id)) return prev;
+            return {
+              ...prev,
+              [reaction.ai_message_id]: [...existing, reaction],
+            };
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "ai_message_reactions" },
+        (payload) => {
+          const reaction = payload.new as AIChatReaction;
+          setReactionsByMessage((prev) => ({
+            ...prev,
+            [reaction.ai_message_id]: (prev[reaction.ai_message_id] ?? []).map((item) => item.id === reaction.id ? reaction : item),
+          }));
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "ai_message_reactions" },
+        (payload) => {
+          const reaction = payload.old as AIChatReaction;
+          setReactionsByMessage((prev) => ({
+            ...prev,
+            [reaction.ai_message_id]: (prev[reaction.ai_message_id] ?? []).filter((item) => item.id !== reaction.id),
+          }));
         }
       )
       .subscribe();
@@ -118,7 +189,7 @@ export const useAIChatMessages = (aiProfileId: string | null) => {
       const decoder = new TextDecoder();
       let textBuffer = "";
       let streamDone = false;
-      const tempId = crypto.randomUUID();
+      const tempId = generateUUID();
 
       // Add placeholder assistant message
       setMessages((prev) => [...prev, { id: tempId, role: "assistant", content: "", created_at: new Date().toISOString() }]);
@@ -193,5 +264,103 @@ export const useAIChatMessages = (aiProfileId: string | null) => {
     return { error };
   };
 
-  return { messages, loading, streaming, sendMessage, deleteMessages };
+  const toggleReaction = async (messageId: string, emoji: string) => {
+    if (!user) return { error: new Error("You must be signed in") };
+
+    const existingReaction = (reactionsByMessage[messageId] ?? []).find((reaction) => reaction.user_id === user.id);
+
+    if (!existingReaction) {
+      const optimisticReaction: AIChatReaction = {
+        id: `temp-ai-reaction-${generateUUID()}`,
+        ai_message_id: messageId,
+        user_id: user.id,
+        emoji,
+        created_at: new Date().toISOString(),
+      };
+
+      setReactionsByMessage((prev) => ({
+        ...prev,
+        [messageId]: [...(prev[messageId] ?? []), optimisticReaction],
+      }));
+
+      const { data, error } = await supabase
+        .from("ai_message_reactions")
+        .insert({
+          ai_message_id: messageId,
+          user_id: user.id,
+          emoji,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        setReactionsByMessage((prev) => ({
+          ...prev,
+          [messageId]: (prev[messageId] ?? []).filter((reaction) => reaction.id !== optimisticReaction.id),
+        }));
+        return { error };
+      }
+
+      setReactionsByMessage((prev) => ({
+        ...prev,
+        [messageId]: (prev[messageId] ?? []).map((reaction) => reaction.id === optimisticReaction.id ? (data as AIChatReaction) : reaction),
+      }));
+
+      return { error: null };
+    }
+
+    if (existingReaction.emoji === emoji) {
+      const previousReactions = reactionsByMessage[messageId] ?? [];
+      setReactionsByMessage((prev) => ({
+        ...prev,
+        [messageId]: (prev[messageId] ?? []).filter((reaction) => reaction.id !== existingReaction.id),
+      }));
+
+      const { error } = await supabase
+        .from("ai_message_reactions")
+        .delete()
+        .eq("id", existingReaction.id)
+        .eq("user_id", user.id);
+
+      if (error) {
+        setReactionsByMessage((prev) => ({
+          ...prev,
+          [messageId]: previousReactions,
+        }));
+      }
+
+      return { error };
+    }
+
+    const previousReactions = reactionsByMessage[messageId] ?? [];
+    setReactionsByMessage((prev) => ({
+      ...prev,
+      [messageId]: (prev[messageId] ?? []).map((reaction) => reaction.id === existingReaction.id ? { ...reaction, emoji } : reaction),
+    }));
+
+    const { data, error } = await supabase
+      .from("ai_message_reactions")
+      .update({ emoji })
+      .eq("id", existingReaction.id)
+      .eq("user_id", user.id)
+      .select()
+      .single();
+
+    if (error) {
+      setReactionsByMessage((prev) => ({
+        ...prev,
+        [messageId]: previousReactions,
+      }));
+      return { error };
+    }
+
+    setReactionsByMessage((prev) => ({
+      ...prev,
+      [messageId]: (prev[messageId] ?? []).map((reaction) => reaction.id === existingReaction.id ? (data as AIChatReaction) : reaction),
+    }));
+
+    return { error: null };
+  };
+
+  return { messages, reactionsByMessage, loading, streaming, sendMessage, deleteMessages, toggleReaction };
 };

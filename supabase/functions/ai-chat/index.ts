@@ -11,8 +11,8 @@ serve(async (req) => {
 
   try {
     const { messages, systemPrompt } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured");
 
     const basePrompt = "You are a friendly human-like girl chatting over text, not a robotic assistant. Sound natural, warm, casual, and relaxed.";
     const stylePrompt = "Match the user's texting style. Mirror their energy, pacing, slang, capitalization, and tone in a natural way without overdoing it.";
@@ -22,44 +22,58 @@ serve(async (req) => {
     const writingPrompt = "Use short, human text messages. Mostly lowercase is fine. Sometimes use short forms like 'wru', 'idk', 'btw', 'lol', or 'tbh' when it fits. No disclaimers or formal assistant phrasing.";
     const brevityPrompt = "ABSOLUTE RULE: Keep replies short. Usually 1 short sentence, sometimes 2. Avoid long explanations unless the user directly asks for more.";
     const customPrompt = typeof systemPrompt === "string" && systemPrompt.trim() ? systemPrompt.trim() : "";
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
+    const normalizedMessages = [
+      {
+        role: "system",
+        content: [basePrompt, stylePrompt, shorthandPrompt, behaviorPrompt, personalPrompt, writingPrompt, brevityPrompt, customPrompt]
+          .filter(Boolean)
+          .join("\n\n"),
       },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "system",
-            content: [basePrompt, stylePrompt, shorthandPrompt, behaviorPrompt, personalPrompt, writingPrompt, brevityPrompt, customPrompt]
-              .filter(Boolean)
-              .join("\n\n"),
-          },
-          ...messages,
-        ],
-        stream: true,
-      }),
-    });
+      ...messages.slice(-12),
+    ];
+
+    const callOpenAI = async (model: string) =>
+      fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0.8,
+          max_completion_tokens: 120,
+          stream: true,
+          messages: normalizedMessages,
+        }),
+      });
+
+    let response = await callOpenAI("gpt-4.1-mini");
+
+    if (response.status === 429) {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      response = await callOpenAI("gpt-4.1-nano");
+    }
 
     if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded, please try again later." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+      if (response.status === 429 || response.status === 402) {
+        const fallbackText = "sorry, i can't chat right this second. try again in a little while.";
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ delta: { content: fallbackText } }] })}\n\n`));
+            controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+            controller.close();
+          },
         });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required, please add credits." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+
+        return new Response(stream, {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
         });
       }
       const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
-      return new Response(JSON.stringify({ error: "AI gateway error" }), {
+      console.error("OpenAI error:", response.status, t);
+      return new Response(JSON.stringify({ error: "OpenAI API error" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
