@@ -106,7 +106,7 @@ const renderMessageContent = (content: string) => {
   return <p className="text-sm whitespace-pre-wrap break-words">{nodes}</p>;
 };
 
-const ChatView = ({ conversation, onBack }: ChatViewProps) => {
+const ChatView = ({ conversation, onBack, onSendChatRequest, onViewRequests }: ChatViewProps) => {
   const { user } = useAuth();
   const { startCall, activeCall, incomingCall } = useCall();
   const { messages, reactionsByMessage, loading, sendMessage, sendTreasureMessage, openTreasureMessage, editMessage, deleteMessages, toggleReaction } = useMessages(conversation?.id ?? null, conversation?.otherUser.user_id ?? null);
