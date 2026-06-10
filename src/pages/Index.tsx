@@ -29,6 +29,8 @@ const Index = () => {
   const [mobileShowChat, setMobileShowChat] = useState(false);
   const [aiProfilesVersion, setAiProfilesVersion] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
+  const [showAddContact, setShowAddContact] = useState(false);
+  const [showRequests, setShowRequests] = useState(false);
 
   if (loading) {
     return (
@@ -58,6 +60,14 @@ const Index = () => {
     setSelectedConv(null);
     setChatMode("ai");
     setMobileShowChat(true);
+  };
+
+  const handleSendChatRequest = () => {
+    setShowAddContact(true);
+  };
+
+  const handleViewRequests = () => {
+    setShowRequests(true);
   };
 
   return (
@@ -103,6 +113,10 @@ const Index = () => {
               aiProfilesVersion={aiProfilesVersion}
               onSelectConversation={handleSelectConv}
               onSelectAIChat={handleSelectAI}
+              showAddContact={showAddContact}
+              onShowAddContactChange={setShowAddContact}
+              showRequests={showRequests}
+              onShowRequestsChange={setShowRequests}
             />
           </Suspense>
         </div>
@@ -120,7 +134,12 @@ const Index = () => {
                 }}
               />
             ) : (
-              <ChatView conversation={selectedConv} onBack={() => setMobileShowChat(false)} />
+              <ChatView
+                conversation={selectedConv}
+                onBack={() => setMobileShowChat(false)}
+                onSendChatRequest={handleSendChatRequest}
+                onViewRequests={handleViewRequests}
+              />
             )}
           </Suspense>
         </div>

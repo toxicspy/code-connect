@@ -21,10 +21,13 @@ import EncryptionDialog from "./EncryptionDialog";
 import { clearConversationPassphrase, getConversationPassphrase, isConversationEncrypted, setConversationPassphrase as persistConversationPassphrase } from "@/lib/chat-encryption";
 import UserProfilePanel from "./UserProfilePanel";
 import { sanitizeDisplayName } from "@/lib/profile-utils";
+import { EmptyChatsState } from "./EmptyChatsState";
 
 interface ChatViewProps {
   conversation: ConversationWithDetails | null;
   onBack?: () => void;
+  onSendChatRequest?: () => void;
+  onViewRequests?: () => void;
 }
 
 interface ReplyDraft {
@@ -541,13 +544,10 @@ const ChatView = ({ conversation, onBack }: ChatViewProps) => {
 
   if (!conversation) {
     return (
-      <div className="flex h-full flex-col items-center justify-center chat-area-bg">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
-          <Send className="h-8 w-8 text-primary/40" />
-        </div>
-        <h3 className="mt-4 font-display text-lg font-semibold text-muted-foreground">Select a chat to start messaging</h3>
-        <p className="mt-1 text-sm text-muted-foreground/60">Or add a new contact using their unique code</p>
-      </div>
+      <EmptyChatsState
+        onSendChatRequest={onSendChatRequest}
+        onViewRequests={onViewRequests}
+      />
     );
   }
 

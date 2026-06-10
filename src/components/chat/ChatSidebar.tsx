@@ -28,15 +28,33 @@ interface ChatSidebarProps {
   aiProfilesVersion?: number;
   onSelectConversation: (conv: ConversationWithDetails) => void;
   onSelectAIChat?: (profile: AIProfile) => void;
+  showAddContact?: boolean;
+  onShowAddContactChange?: (show: boolean) => void;
+  showRequests?: boolean;
+  onShowRequestsChange?: (show: boolean) => void;
+  searchInputFocused?: boolean;
+  onSearchInputFocusedChange?: (focused: boolean) => void;
 }
 
-const ChatSidebar = ({ selectedConversation, selectedAIProfileId, aiProfilesVersion = 0, onSelectConversation, onSelectAIChat }: ChatSidebarProps) => {
+const ChatSidebar = ({
+  selectedConversation,
+  selectedAIProfileId,
+  aiProfilesVersion = 0,
+  onSelectConversation,
+  onSelectAIChat,
+  showAddContact: externalShowAddContact,
+  onShowAddContactChange,
+  showRequests: externalShowRequests,
+  onShowRequestsChange,
+  searchInputFocused: externalSearchInputFocused,
+  onSearchInputFocusedChange,
+}: ChatSidebarProps) => {
   const { user, profile, signOut } = useAuth();
   const { conversations, loading, refetch } = useConversations();
   const { pendingIncomingCount, getRequestStateForUser, sendRequest, refreshRequests } = useChatRequests();
   const [search, setSearch] = useState("");
-  const [showAddContact, setShowAddContact] = useState(false);
-  const [showRequests, setShowRequests] = useState(false);
+  const [internalShowAddContact, setInternalShowAddContact] = useState(false);
+  const [internalShowRequests, setInternalShowRequests] = useState(false);
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
   const [searching, setSearching] = useState(false);
   const [requestingUserId, setRequestingUserId] = useState<string | null>(null);
@@ -45,6 +63,25 @@ const ChatSidebar = ({ selectedConversation, selectedAIProfileId, aiProfilesVers
   const [showCreateAI, setShowCreateAI] = useState(false);
   const [aiProfiles, setAiProfiles] = useState<AIProfile[]>([]);
   const [tab, setTab] = useState<"chats" | "ai">("chats");
+
+  // Use external state if provided, otherwise use internal state
+  const showAddContact = externalShowAddContact !== undefined ? externalShowAddContact : internalShowAddContact;
+  const setShowAddContact = (value: boolean) => {
+    if (onShowAddContactChange) {
+      onShowAddContactChange(value);
+    } else {
+      setInternalShowAddContact(value);
+    }
+  };
+
+  const showRequests = externalShowRequests !== undefined ? externalShowRequests : internalShowRequests;
+  const setShowRequests = (value: boolean) => {
+    if (onShowRequestsChange) {
+      onShowRequestsChange(value);
+    } else {
+      setInternalShowRequests(value);
+    }
+  };
 
   // Fetch AI profiles
   useEffect(() => {
