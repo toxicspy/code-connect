@@ -468,6 +468,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: guestCredentials.email,
         password: guestCredentials.password,
+        options: {
+          data: {
+            display_name: guestCredentials.displayName,
+          },
+        },
       });
 
       if (signUpError) throw signUpError;
