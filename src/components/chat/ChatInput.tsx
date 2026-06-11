@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 import { getMessageTypeLabel } from "@/lib/message-utils";
-import { Picker } from "@emoji-mart/react";
+import Picker from "@emoji-mart/react";
 import data from "@emoji-mart/data";
 
 interface ReplyPreviewData {
