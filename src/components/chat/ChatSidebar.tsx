@@ -494,6 +494,7 @@ const ChatSidebar = ({
                     isArchived={conv.is_archived}
                     otherUserName={conv.otherUser.display_name}
                     otherUserCode={conv.otherUser.user_code}
+                    otherUserId={conv.otherUser.user_id}
                     onUpdate={refetch}
                     onDelete={selectedConversation === conv.id ? () => onSelectConversation(null as any) : undefined}
                   >

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Pin, PinOff, Archive, ArchiveRestore, Trash2, Share2 } from "lucide-react";
+import { Pin, PinOff, Archive, ArchiveRestore, Trash2, Share2, Ban } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +19,7 @@ interface ConversationContextMenuProps {
   isArchived: boolean;
   otherUserName: string;
   otherUserCode: string;
+  otherUserId: string;
   onUpdate: () => void;
   onDelete?: () => void;
 }
@@ -30,12 +31,15 @@ const ConversationContextMenu = ({
   isArchived,
   otherUserName,
   otherUserCode,
+  otherUserId,
   onUpdate,
   onDelete,
 }: ConversationContextMenuProps) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [checkingBlock, setCheckingBlock] = useState(false);
 
   const togglePin = async () => {
     if (!user || loading) return;
@@ -82,6 +86,33 @@ const ConversationContextMenu = ({
     setLoading(false);
   };
 
+  const toggleBlock = async () => {
+    if (!user || loading) return;
+    setLoading(true);
+    try {
+      if (isBlocked) {
+        const { error } = await supabase.rpc("unblock_chat_user", {
+          _blocked_user_id: otherUserId,
+        });
+        if (error) throw error;
+        setIsBlocked(false);
+        toast.success("User unblocked");
+      } else {
+        const { error } = await supabase.rpc("block_chat_user", {
+          _blocked_user_id: otherUserId,
+        });
+        if (error) throw error;
+        setIsBlocked(true);
+        toast.success("User blocked");
+      }
+      onUpdate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update block status");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <>
       <DropdownMenu>
@@ -111,6 +142,9 @@ const ConversationContextMenu = ({
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setShowShare(true)}>
             <Share2 className="mr-2 h-4 w-4" /> Share
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={toggleBlock} disabled={loading}>
+            <Ban className="mr-2 h-4 w-4" /> {isBlocked ? "Unblock" : "Block"}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={deleteChat} disabled={loading} className="text-destructive focus:text-destructive">
