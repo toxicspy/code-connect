@@ -79,6 +79,12 @@ const ChatInput = ({
           data: dataModule.default,
         });
       })
+      .catch((error) => {
+        if (isMounted) {
+          console.error("Failed to load emoji picker:", error);
+          toast.error("Failed to load emoji picker");
+        }
+      })
       .finally(() => {
         if (isMounted) {
           setIsEmojiLoading(false);
