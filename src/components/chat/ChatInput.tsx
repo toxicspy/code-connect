@@ -1,10 +1,12 @@
-import { useState, useRef, useEffect, type ComponentType } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Send, Smile, Plus, Image, Camera, Paperclip, X, Pencil, Reply, FileText, Mic, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 import { getMessageTypeLabel } from "@/lib/message-utils";
+import { Picker } from "@emoji-mart/react";
+import data from "@emoji-mart/data";
 
 interface ReplyPreviewData {
   senderName: string;
@@ -42,11 +44,6 @@ const ChatInput = ({
   const [input, setInput] = useState(value ?? "");
   const [showAttach, setShowAttach] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
-  const [emojiPicker, setEmojiPicker] = useState<{
-    Picker: ComponentType<Record<string, unknown>>;
-    data: Record<string, unknown>;
-  } | null>(null);
-  const [isEmojiLoading, setIsEmojiLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -64,37 +61,6 @@ const ChatInput = ({
       inputRef.current?.focus();
     }
   }, [isEditing]);
-
-  useEffect(() => {
-    if (!emojiOpen || emojiPicker || isEmojiLoading) return;
-
-    let isMounted = true;
-    setIsEmojiLoading(true);
-
-    Promise.all([import("@emoji-mart/react"), import("@emoji-mart/data")])
-      .then(([pickerModule, dataModule]) => {
-        if (!isMounted) return;
-        setEmojiPicker({
-          Picker: pickerModule.default,
-          data: dataModule.default,
-        });
-      })
-      .catch((error) => {
-        if (isMounted) {
-          console.error("Failed to load emoji picker:", error);
-          toast.error("Failed to load emoji picker");
-        }
-      })
-      .finally(() => {
-        if (isMounted) {
-          setIsEmojiLoading(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [emojiOpen, emojiPicker, isEmojiLoading]);
 
   const updateInput = (nextValue: string | ((prev: string) => string)) => {
     const resolvedValue = typeof nextValue === "function" ? nextValue(input) : nextValue;
@@ -250,20 +216,14 @@ const ChatInput = ({
                 </Button>
               </PopoverTrigger>
               <PopoverContent side="top" align="start" className="w-auto border-0 p-0 shadow-xl">
-                {emojiPicker ? (
-                  <emojiPicker.Picker
-                    data={emojiPicker.data}
-                    onEmojiSelect={onEmojiSelect}
-                    theme="auto"
-                    previewPosition="none"
-                    skinTonePosition="none"
-                    maxFrequentRows={2}
-                  />
-                ) : (
-                  <div className="flex h-[360px] w-[320px] items-center justify-center rounded-2xl bg-popover px-6 text-sm text-muted-foreground">
-                    {isEmojiLoading ? "Loading emoji picker..." : "Open emoji picker"}
-                  </div>
-                )}
+                <Picker
+                  data={data}
+                  onEmojiSelect={onEmojiSelect}
+                  theme="auto"
+                  previewPosition="none"
+                  skinTonePosition="none"
+                  maxFrequentRows={2}
+                />
               </PopoverContent>
             </Popover>
 
